@@ -17,6 +17,8 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.use('/api/products', require('./src/routes/products'));
+
 /* ---------- Arranque ---------- */
 const PORT = process.env.PORT || 3000;
 
