@@ -1,0 +1,110 @@
+// City Pets — Esquema de base de datos (SQLite)
+// Modelos basados en los objetos de js/data.js
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String
+  email        String        @unique
+  passwordHash String
+  address      String        @default("")
+  role         String        @default("user")
+  channel      String        @default("Directo")
+  createdAt    DateTime      @default(now())
+  pets         Pet[]
+  orders       Order[]
+  feedback     Feedback[]
+  attributions Attribution[]
+}
+
+model Pet {
+  id      String @id @default(cuid())
+  name    String
+  species String
+  breed   String @default("")
+  age     Float
+  ration  Float  @default(0)
+  weight  Float?
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
+}
+
+model Product {
+  id          String       @id @default(cuid())
+  name        String
+  species     String
+  category    String
+  price       Int
+  unit        String       @default("1 und")
+  grams       Int          @default(0)
+  stock       Int          @default(0)
+  desc        String       @default("")
+  dailyRation Int          @default(0)
+  tags        String       @default("[]")
+  images      String       @default("[]")
+  video       String       @default("")
+  rating      Float        @default(4.0)
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  user          User        @relation(fields: [userId], references: [id])
+  userId        String
+  userName      String
+  phone         String
+  address       String
+  items         OrderItem[]
+  subtotal      Int
+  delivery      Int
+  total         Int
+  createdAt     DateTime    @default(now())
+  slotGenerated String
+  deliverySlot  String
+  deliveryDate  String
+  deliveryLabel String
+  payment       String
+  status        String      @default("pendiente")
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+  product   Product? @relation(fields: [productId], references: [id])
+  productId String?
+  name      String
+  qty       Int
+  price     Int
+  image     String   @default("")
+}
+
+model Feedback {
+  id           String   @id @default(cuid())
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId       String?
+  userName     String   @default("Anónimo")
+  calidad      Int
+  uso          Int
+  cumplimiento Int
+  confianza    Int
+  msg          String   @default("")
+  date         DateTime @default(now())
+}
+
+model Attribution {
+  id      String   @id @default(cuid())
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
+  channel String
+  date    DateTime @default(now())
+}

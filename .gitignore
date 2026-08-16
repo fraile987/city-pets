@@ -23,3 +23,9 @@ npm-debug.log*
 
 # Cobertura / pruebas
 coverage/
+
+# Skills de agentes de IA instaladas por Prisma 7
+city-pets-backend/.agents/
+city-pets-backend/.claude/
+city-pets-backend/.windsurf/
+city-pets-backend/skills-lock.json
