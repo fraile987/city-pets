@@ -19,6 +19,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/products', require('./src/routes/products'));
 app.use('/api/auth', require('./src/routes/auth'));
+app.use('/api/pets', require('./src/routes/pets'));
 
 /* ---------- Arranque ---------- */
 const PORT = process.env.PORT || 3000;
