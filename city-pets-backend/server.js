@@ -18,6 +18,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/products', require('./src/routes/products'));
+app.use('/api/auth', require('./src/routes/auth'));
 
 /* ---------- Arranque ---------- */
 const PORT = process.env.PORT || 3000;
