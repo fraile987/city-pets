@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>City Pets — Tu mascota feliz</title>
+  <meta name="description" content="City Pets: tienda de mascotas con entrega a domicilio. Alimento, juguetes y accesorios para perros y gatos. Tu mascota feliz." />
+  <meta name="theme-color" content="#0B1F3A" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="apple-touch-icon" href="assets/logo.svg" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="City Pets" />
+  <meta property="og:title" content="City Pets — Tu mascota feliz" />
+  <meta property="og:description" content="Alimento, juguetes y accesorios para perros y gatos con entrega a domicilio. Calcula cuánto dura tu alimento y ahorra con City Pets." />
+  <meta property="og:url" content="https://citypets.example.com/" />
+  <meta property="og:image" content="https://citypets.example.com/assets/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Logo City Pets — Tu mascota feliz" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="City Pets — Tu mascota feliz" />
+  <meta name="twitter:description" content="Tienda de mascotas con entrega a domicilio. Perros y gatos." />
+  <meta name="twitter:image" content="https://citypets.example.com/assets/og.png" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ================= NAVBAR ================= -->
+  <nav class="navbar">
+    <div class="container navbar-inner">
+      <a class="brand" href="#home" data-nav="home">
+        <img src="assets/logo.svg" alt="Logo City Pets" />
+        <span>City Pets<small>TU MASCOTA FELIZ</small></span>
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="#home" data-nav="home" class="active">Inicio</a>
+        <a href="#tienda" data-nav="tienda">Tienda</a>
+        <a href="#perfil" data-nav="perfil">Mi Perfil</a>
+        <a href="#historial" data-nav="historial">Mis Pedidos</a>
+        <a href="#herramientas" data-nav="herramientas">Herramientas</a>
+      </div>
+      <div class="nav-actions">
+        <span class="badge badge-gold hidden" id="userChip" style="font-weight:700"></span>
+        <a class="btn btn-gold btn-sm" href="admin.html">Admin</a>
+        <button class="btn btn-outline btn-sm" style="border-color:var(--gold-400);color:var(--gold-400)" id="btnCart" type="button">
+          Carrito <span class="badge badge-gold" id="cartCount">0</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Switch de vistas en móvil -->
+  <div class="view-switcher" id="viewSwitcher">
+    <button class="active" data-nav="home" type="button">Inicio</button>
+    <button data-nav="tienda" type="button">Tienda</button>
+    <button data-nav="perfil" type="button">Perfil</button>
+    <button data-nav="historial" type="button">Pedidos</button>
+    <button data-nav="herramientas" type="button">Herramientas</button>
+  </div>
+
+  <main id="app">
+
+    <!-- ================= VISTA: HOME (LANDING SPLIT) ================= -->
+    <section class="view" id="view-home">
+      <div class="hero">
+        <div class="hero-split" id="heroSplit">
+          <!-- PERROS -->
+          <article class="split-panel dogs" id="panelDogs" data-panel="dogs">
+            <div class="panel-bg" aria-hidden="true"></div>
+            <button class="expand-btn" data-action="expand" data-panel="dogs" aria-label="Maximizar perros" title="Maximizar">⤢</button>
+            <div class="panel-content">
+              <div class="icon-badge">🐕</div>
+              <div class="tag">Sección izquierda</div>
+              <h1>Perros</h1>
+              <p>Alimento premium, snacks dentales y juguetes resistentes para consentir a tu mejor amigo. Descubre todo para su bienestar.</p>
+              <div class="panel-actions">
+                <button class="btn btn-gold" data-action="expand" data-panel="dogs">Maximizar</button>
+                <button class="btn btn-white restore-btn" data-action="restore">Ver ambas</button>
+                <button class="btn btn-ghost" data-action="go-store" data-species="Perros">Ver productos</button>
+              </div>
+            </div>
+          </article>
+          <!-- GATOS -->
+          <article class="split-panel cats" id="panelCats" data-panel="cats">
+            <div class="panel-bg" aria-hidden="true"></div>
+            <button class="expand-btn" data-action="expand" data-panel="cats" aria-label="Maximizar gatos" title="Maximizar">⤢</button>
+            <div class="panel-content">
+              <div class="icon-badge">🐈</div>
+              <div class="tag">Sección derecha</div>
+              <h1>Gatos</h1>
+              <p>Rascadores, arena sanitaria y alimentos balanceados que cuidan la salud de tu felino. Elegante y feliz.</p>
+              <div class="panel-actions">
+                <button class="btn btn-gold" data-action="expand" data-panel="cats">Maximizar</button>
+                <button class="btn btn-white restore-btn" data-action="restore">Ver ambas</button>
+                <button class="btn btn-ghost" data-action="go-store" data-species="Gatos">Ver productos</button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <!-- Horarios de atención -->
+      <div class="info-bar">
+        <div class="container info-bar-inner">
+          <span>🕒 <strong>Horarios de atención:</strong> Lun a Sáb &nbsp;8:00 AM – 8:00 PM &nbsp;·&nbsp; Dom &nbsp;9:00 AM – 2:00 PM</span>
+          <span>🛵 <strong>Entregas:</strong> Mañana 6:00–13:00 · Tarde 13:00–22:00</span>
+        </div>
+      </div>
+
+      <!-- Flyer oferta -->
+      <div class="container section" style="padding-top:48px">
+        <div class="flyer">
+          <div class="big">🐾 Envío a domicilio por $8.000 — entrega el mismo día en la franja siguiente</div>
+          <div class="small">Regístrate y calcula cuánto dura el alimento de tu mascota</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA: TIENDA ================= -->
+    <section class="view hidden" id="view-tienda">
+      <div class="container section">
+        <div class="section-title">
+          <span class="eyebrow">Catálogo</span>
+          <h2 id="storeTitle">Todos los productos</h2>
+          <p>Alimento, snacks, juguetes, higiene y accesorios.</p>
+          <div class="gold-line"></div>
+        </div>
+        <div class="tabs" id="storeTabs">
+          <button class="tab active" data-filter="todos">Todos</button>
+          <button class="tab" data-filter="Perros">Perros</button>
+          <button class="tab" data-filter="Gatos">Gatos</button>
+          <button class="tab" data-filter="General">General</button>
+        </div>
+        <div class="grid" id="productGrid"></div>
+        <div class="ta-center muted hidden" id="noProducts">No hay productos disponibles.</div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA: PERFIL ================= -->
+    <section class="view hidden" id="view-perfil">
+      <div class="container section">
+        <div class="section-title">
+          <span class="eyebrow">Cuenta</span>
+          <h2>Registro y perfil</h2>
+          <p>Gestiona tus datos y el registro de tus mascotas.</p>
+          <div class="gold-line"></div>
+        </div>
+
+        <!-- Registro -->
+        <div class="panel" id="registerPanel">
+          <div class="panel-header">
+            <h3>Crear cuenta</h3>
+            <span class="badge badge-gold">Tu mascota feliz</span>
+          </div>
+          <div class="field"><label for="regName">Nombre completo</label><input id="regName" type="text" placeholder="Ej: María Fernanda López" /></div>
+          <div class="row">
+            <div class="field grow"><label for="regPhone">Línea móvil</label><input id="regPhone" type="tel" placeholder="Ej: 300 123 4567" /></div>
+            <div class="field grow"><label for="regEmail">Correo electrónico</label><input id="regEmail" type="email" placeholder="Ej: maria@correo.com" /></div>
+          </div>
+          <div class="field">
+            <label for="regChannel">¿Cómo llegaste a City Pets? <span class="muted">(atribución)</span></label>
+            <select id="regChannel">
+              <option value="">Selecciona el canal…</option>
+            </select>
+          </div>
+          <button class="btn btn-navy" id="btnRegister">Registrarme</button>
+        </div>
+
+        <!-- Panel del usuario logueado -->
+        <div class="panel hidden" id="profilePanel">
+          <div class="panel-header">
+            <h3 id="profileTitle">Hola 👋</h3>
+            <button class="btn btn-outline btn-sm" id="btnLogout">Cerrar sesión</button>
+          </div>
+          <div class="field"><label>Nombre completo</label><input id="profName" type="text" /></div>
+          <div class="row">
+            <div class="field grow"><label>Línea móvil</label><input id="profPhone" type="tel" /></div>
+            <div class="field grow"><label>Correo electrónico</label><input id="profEmail" type="email" /></div>
+          </div>
+          <div class="field"><label>Dirección de entrega</label><input id="profAddress" type="text" placeholder="Barrio y dirección para domicilios" /></div>
+          <button class="btn btn-navy" id="btnSaveProfile">Guardar cambios</button>
+        </div>
+
+        <!-- Mascotas -->
+        <div class="panel" id="petsPanel">
+          <div class="panel-header">
+            <h3>Mis mascotas</h3>
+            <button class="btn btn-gold btn-sm" id="btnAddPet">+ Añadir mascota</button>
+          </div>
+          <div class="hidden" id="loginPetHint">
+            <p class="muted">Regístrate o inicia sesión para registrar a tus mascotas.</p>
+          </div>
+          <div class="grid" id="petsGrid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr))"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA: HISTORIAL ================= -->
+    <section class="view hidden" id="view-historial">
+      <div class="container section">
+        <div class="section-title">
+          <span class="eyebrow">Tus compras</span>
+          <h2>Historial de pedidos</h2>
+          <p>Consulta el estado, la entrega y el consumo de tus pedidos.</p>
+          <div class="gold-line"></div>
+        </div>
+        <div class="hidden" id="loginHistHint">
+          <div class="panel ta-center">
+            <p class="muted">Inicia sesión para ver tu historial de compras.</p>
+            <button class="btn btn-navy mt-3" data-nav="perfil">Ir a Mi perfil</button>
+          </div>
+        </div>
+        <div id="ordersList"></div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA: HERRAMIENTAS ================= -->
+    <section class="view hidden" id="view-herramientas">
+      <div class="container section">
+        <div class="section-title">
+          <span class="eyebrow">Herramientas</span>
+          <h2>Módulos de apoyo</h2>
+          <p>Calcula, compara y recomienda.</p>
+          <div class="gold-line"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h3>⏱ Calculadora de duración del alimento</h3></div>
+          <p class="muted mb-3">Según el gramaje del paquete y la ración diaria de tu mascota, estimamos cuántos días alcanza.</p>
+          <div class="row">
+            <div class="field grow">
+              <label for="calcProduct">Producto de alimento</label>
+              <select id="calcProduct"></select>
+            </div>
+            <div class="field grow">
+              <label for="calcGrams">Gramaje del paquete (g)</label>
+              <input id="calcGrams" type="number" min="0" placeholder="Ej: 15000" />
+            </div>
+            <div class="field grow">
+              <label for="calcRation">Ración diaria (g/día)</label>
+              <input id="calcRation" type="number" min="1" placeholder="Ej: 210" />
+            </div>
+          </div>
+          <button class="btn btn-navy" id="btnCalcDuration">Calcular duración</button>
+          <div class="mt-3" id="calcResult"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h3>⚖️ Calculadora comparativa de precios</h3></div>
+          <p class="muted mb-3">Compara el precio por gramo/kilogramo de City Pets frente a otros almacenes.</p>
+          <div class="row">
+            <div class="field grow">
+              <label for="compProduct">Producto City Pets</label>
+              <select id="compProduct"></select>
+            </div>
+            <div class="field grow">
+              <label for="compPrice">Precio competidor</label>
+              <input id="compPrice" type="number" min="0" placeholder="Precio del mismo producto en otro almacén" />
+            </div>
+            <div class="field grow">
+              <label for="compGrams">Gramaje equivalente (g)</label>
+              <input id="compGrams" type="number" min="1" placeholder="Ej: 15000" />
+            </div>
+          </div>
+          <button class="btn btn-navy" id="btnCompare">Comparar</button>
+          <div class="mt-3" id="compResult"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h3>⭐ Recomendaciones para ti</h3></div>
+          <div id="recommendations" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr))"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3>🗣 Calificación y feedback</h3>
+            <span class="badge badge-navy">4 pilares</span>
+          </div>
+          <p class="muted mb-3">Evalúa nuestra calidad, facilidad de uso, cumplimiento y confianza (1 a 5 estrellas).</p>
+          <div class="row">
+            <div class="field grow">
+              <label>Calidad</label>
+              <div class="stars"><input type="radio" name="f_calidad" id="fc1" value="1"><label for="fc1">★</label><input type="radio" name="f_calidad" id="fc2" value="2"><label for="fc2">★</label><input type="radio" name="f_calidad" id="fc3" value="3"><label for="fc3">★</label><input type="radio" name="f_calidad" id="fc4" value="4"><label for="fc4">★</label><input type="radio" name="f_calidad" id="fc5" value="5"><label for="fc5">★</label></div>
+            </div>
+            <div class="field grow">
+              <label>Facilidad de uso</label>
+              <div class="stars"><input type="radio" name="f_uso" id="fu1" value="1"><label for="fu1">★</label><input type="radio" name="f_uso" id="fu2" value="2"><label for="fu2">★</label><input type="radio" name="f_uso" id="fu3" value="3"><label for="fu3">★</label><input type="radio" name="f_uso" id="fu4" value="4"><label for="fu4">★</label><input type="radio" name="f_uso" id="fu5" value="5"><label for="fu5">★</label></div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field grow">
+              <label>Cumplimiento</label>
+              <div class="stars"><input type="radio" name="f_cumpl" id="fcm1" value="1"><label for="fcm1">★</label><input type="radio" name="f_cumpl" id="fcm2" value="2"><label for="fcm2">★</label><input type="radio" name="f_cumpl" id="fcm3" value="3"><label for="fcm3">★</label><input type="radio" name="f_cumpl" id="fcm4" value="4"><label for="fcm4">★</label><input type="radio" name="f_cumpl" id="fcm5" value="5"><label for="fcm5">★</label></div>
+            </div>
+            <div class="field grow">
+              <label>Confianza</label>
+              <div class="stars"><input type="radio" name="f_conf" id="fc1_" value="1"><label for="fc1_">★</label><input type="radio" name="f_conf" id="fc2_" value="2"><label for="fc2_">★</label><input type="radio" name="f_conf" id="fc3_" value="3"><label for="fc3_">★</label><input type="radio" name="f_conf" id="fc4_" value="4"><label for="fc4_">★</label><input type="radio" name="f_conf" id="fc5_" value="5"><label for="fc5_">★</label></div>
+            </div>
+          </div>
+          <div class="field"><label>Comentarios</label><textarea id="feedbackMsg" placeholder="Cuéntanos tu experiencia…"></textarea></div>
+          <button class="btn btn-navy" id="btnFeedback">Enviar feedback</button>
+          <div class="mt-4" id="feedbackList"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer style="background:var(--navy-900);color:#C9D4E4;padding:40px 0;margin-top:40px">
+    <div class="container row" style="justify-content:space-between;align-items:center">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;color:#fff;font-weight:800">
+          <img src="assets/logo.svg" alt="City Pets" style="width:40px;height:40px;border-radius:8px" />
+          City Pets
+        </div>
+        <p class="muted mt-2" style="color:#8fa2bb">Tu mascota feliz · 📍 Medellín, Colombia</p>
+        <p class="muted" style="color:#8fa2bb">🕒 Lun-Sáb 8:00-20:00 · Dom 9:00-14:00</p>
+      </div>
+      <div class="ta-center">
+        <p class="muted" style="color:#8fa2bb">📞 300 123 4567 · 💬 WhatsApp</p>
+        <p class="muted" style="color:#8fa2bb">Instagram · Facebook · TikTok</p>
+      </div>
+    </div>
+    <div class="container ta-center muted mt-4" style="color:#5d7290;border-top:1px solid rgba(255,255,255,.08);padding-top:18px">
+      © 2026 City Pets — Plataforma demo con datos de ejemplo.
+    </div>
+  </footer>
+
+  <!-- ================= CARRITO (DRAWER) ================= -->
+  <div class="cart-drawer" id="cartDrawer">
+    <div class="drawer-backdrop" data-close-cart></div>
+    <aside class="drawer-panel">
+      <div class="drawer-head">
+        <h3>🛒 Tu carrito</h3>
+        <button class="ico-close" data-close-cart aria-label="Cerrar">✕</button>
+      </div>
+      <div class="drawer-body" id="cartBody"></div>
+      <div class="drawer-foot">
+        <div class="summary-line"><span>Subtotal artículos</span><span class="money" id="cartSubtotal">$0</span></div>
+        <div class="summary-line"><span>Domicilio</span><span class="money">$8.000</span></div>
+        <div class="summary-line total"><span>Total a pagar</span><span class="money" id="cartTotal">$8.000</span></div>
+        <button class="btn btn-gold btn-block mt-3" id="btnCheckout">Ir a pagar</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ================= MODAL CHECKOUT ================= -->
+  <div class="modal-backdrop" id="checkoutModal">
+    <div class="modal">
+      <div class="modal-head"><h3>Finalizar compra</h3><button class="ico-close" data-close-modal aria-label="Cerrar">✕</button></div>
+      <div class="modal-body">
+        <div id="checkoutUserInfo" class="panel" style="background:var(--cloud);padding:14px"></div>
+        <div class="field"><label>Dirección de entrega</label><input id="checkoutAddress" type="text" placeholder="Barrio y dirección completa" /></div>
+        <h4 style="margin-bottom:10px">Franja de entrega</h4>
+        <div class="row mb-3" id="slotOptions"></div>
+        <p class="muted" id="slotRule" style="font-size:.82rem;margin-bottom:16px"></p>
+
+        <h4 style="margin-bottom:10px">Método de pago (contra entrega)</h4>
+        <div class="row mb-3" id="payOptions"></div>
+        <div class="hidden" id="cashOptions" style="background:var(--cloud);border-radius:9px;padding:14px;margin-bottom:16px">
+          <div class="field">
+            <label>Billete con el que pagas (para cambio)</label>
+            <select id="cashDenom">
+              <option value="0">No necesito cambio</option>
+              <option value="20000">$20.000</option>
+              <option value="50000">$50.000</option>
+              <option value="100000">$100.000</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Cambio a recibir</label>
+            <div id="cashChange" class="money" style="font-weight:800;color:var(--navy-800)">$0</div>
+          </div>
+        </div>
+        <div class="hidden" id="digitalOptions" style="background:var(--cloud);border-radius:9px;padding:14px;margin-bottom:16px">
+          <p class="muted" style="font-size:.88rem">💳 Pagarás al recibir con <strong>transferencia (Nequi/Daviplata/Bancolombia)</strong> o <strong>datáfono</strong>. Nuestro domiciliario llevará el datáfono o te pasará el QR de pago.</p>
+        </div>
+
+        <div style="background:var(--cloud);border-radius:9px;padding:14px">
+          <div class="summary-line"><span>Subtotal artículos</span><span class="money" id="coSubtotal">$0</span></div>
+          <div class="summary-line"><span>Domicilio</span><span class="money">$8.000</span></div>
+          <div class="summary-line total"><span>Total a pagar</span><span class="money" id="coTotal">$8.000</span></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-modal>Cancelar</button>
+        <button class="btn btn-gold" id="btnConfirmOrder">Confirmar pedido ✓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL PRODUCTO ================= -->
+  <div class="modal-backdrop" id="productModal">
+    <div class="modal">
+      <div class="modal-head"><h3 id="pmTitle">Producto</h3><button class="ico-close" data-close-modal aria-label="Cerrar">✕</button></div>
+      <div class="modal-body" id="pmBody"></div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL MASCOTA ================= -->
+  <div class="modal-backdrop" id="petModal">
+    <div class="modal">
+      <div class="modal-head"><h3 id="petModalTitle">Añadir mascota</h3><button class="ico-close" data-close-modal aria-label="Cerrar">✕</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Nombre de la mascota</label><input id="petName" type="text" placeholder="Ej: Toby" /></div>
+        <div class="row">
+          <div class="field grow">
+            <label>Especie</label>
+            <select id="petSpecies"><option value="Perros">Perro 🐕</option><option value="Gatos">Gato 🐈</option></select>
+          </div>
+          <div class="field grow"><label>Raza</label><input id="petBreed" type="text" placeholder="Ej: Golden Retriever" /></div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>Edad</label><input id="petAge" type="number" min="0" step="0.5" placeholder="Ej: 3" /></div>
+          <div class="field grow"><label>Ración diaria (g/día) <span class="muted">para la calculadora</span></label><input id="petRation" type="number" min="0" placeholder="Ej: 210" /></div>
+        </div>
+        <div class="field"><label>Peso aproximado (kg) <span class="muted">(opcional)</span></label><input id="petWeight" type="number" min="0" step="0.1" placeholder="Ej: 12" /></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-modal>Cancelar</button>
+        <button class="btn btn-gold" id="btnSavePet">Guardar mascota</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

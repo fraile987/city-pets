@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>City Pets — Panel de Administración</title>
+  <meta name="theme-color" content="#0B1F3A" />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="container navbar-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.svg" alt="City Pets" />
+        <span>City Pets<small>PANEL ADMIN</small></span>
+      </a>
+      <div class="nav-links">
+        <a href="#" data-atab="dashboard" class="active">Dashboard</a>
+        <a href="#" data-atab="catalogo">Catálogo</a>
+        <a href="#" data-atab="pedidos">Pedidos</a>
+        <a href="#" data-atab="incidencias">Incidencias</a>
+        <a href="#" data-atab="atribucion">Atribución</a>
+      </div>
+      <div class="nav-actions">
+        <a class="btn btn-gold btn-sm" href="index.html">← Volver a la tienda</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container" style="padding:32px 0">
+
+    <!-- ============ DASHBOARD / KPIs ============ -->
+    <section data-aview="dashboard">
+      <div class="section-title" style="margin-bottom:28px">
+        <span class="eyebrow">Tiempo real</span>
+        <h2>Métricas y resumen</h2>
+        <div class="gold-line"></div>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi navy">
+          <div class="kpi-label">Total de compras realizadas</div>
+          <div class="kpi-value" id="kpiOrders">0</div>
+          <div class="kpi-sub" id="kpiOrdersVal">$0 en ventas</div>
+        </div>
+        <div class="kpi gold">
+          <div class="kpi-label">Compras pendientes por entregar</div>
+          <div class="kpi-value" id="kpiPending">0</div>
+          <div class="kpi-sub" id="kpiPendingVal">—</div>
+        </div>
+        <div class="kpi green">
+          <div class="kpi-label">Unidades en bodega</div>
+          <div class="kpi-value" id="kpiStock">0</div>
+          <div class="kpi-sub" id="kpiStockProd">0 referencias</div>
+        </div>
+        <div class="kpi red">
+          <div class="kpi-label">Incidencias de entrega</div>
+          <div class="kpi-value" id="kpiIncidents">0</div>
+          <div class="kpi-sub" id="kpiIncidentsUsers">0 usuarios no cumplieron</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="panel grow">
+          <h3 class="mb-3">Atribución por canal</h3>
+          <div id="attributionBars"></div>
+        </div>
+        <div class="panel grow">
+          <h3 class="mb-3">Últimos pedidos</h3>
+          <div id="recentOrders"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CATÁLOGO / CMS ============ -->
+    <section data-aview="catalogo" class="hidden">
+      <div class="section-title" style="margin-bottom:28px">
+        <span class="eyebrow">CMS</span>
+        <h2>Gestión de catálogo</h2>
+        <div class="gold-line"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Acciones</h3>
+          <div class="row">
+            <button class="btn btn-gold btn-sm" id="btnNewProduct">+ Producto individual</button>
+            <button class="btn btn-navy btn-sm" id="btnDownloadTemplate">Descargar plantilla CSV</button>
+            <label class="btn btn-outline btn-sm" style="cursor:pointer">⬆ Carga masiva CSV
+              <input type="file" id="csvInput" accept=".csv,text/csv" class="hidden" />
+            </label>
+          </div>
+        </div>
+        <p class="muted" style="font-size:.85rem">
+          CSV: <code>name,species,category,price,unit,grams,stock,desc,dailyRation,tags</code><br/>
+          species: Perros | Gatos | General · tags separadas por ";"
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Imagen</th><th>Producto</th><th>Especie</th><th>Precio</th><th>Stock</th><th>Media</th><th>Acciones</th></tr></thead>
+          <tbody id="adminProducts"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ PEDIDOS ============ -->
+    <section data-aview="pedidos" class="hidden">
+      <div class="section-title" style="margin-bottom:28px">
+        <span class="eyebrow">Operación</span>
+        <h2>Gestión de pedidos</h2>
+        <div class="gold-line"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Cliente</th><th>Total</th><th>Entrega</th><th>Pago</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="adminOrders"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ INCIDENCIAS ============ -->
+    <section data-aview="incidencias" class="hidden">
+      <div class="section-title" style="margin-bottom:28px">
+        <span class="eyebrow">Reporte</span>
+        <h2>Incidencias de entrega</h2>
+        <p class="muted">Usuarios cuyos pedidos no se cumplieron con el servicio.</p>
+        <div class="gold-line"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pedido</th><th>Usuario</th><th>Móvil</th><th>Fecha</th><th>Motivo</th><th>Acciones</th></tr></thead>
+          <tbody id="adminIncidents"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ ATRIBUCIÓN ============ -->
+    <section data-aview="atribucion" class="hidden">
+      <div class="section-title" style="margin-bottom:28px">
+        <span class="eyebrow">Analítica</span>
+        <h2>Análisis de atribución</h2>
+        <p class="muted">Canal o red social por el cual ingresaron los usuarios registrados.</p>
+        <div class="gold-line"></div>
+      </div>
+      <div class="row">
+        <div class="panel grow">
+          <h3 class="mb-3">Usuarios por canal</h3>
+          <div id="attributionTable"></div>
+        </div>
+        <div class="panel grow">
+          <h3 class="mb-3">Detalle de registros</h3>
+          <div id="attributionDetail"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ MODAL PRODUCTO ============ -->
+  <div class="modal-backdrop" id="productModal">
+    <div class="modal">
+      <div class="modal-head"><h3 id="apmTitle">Nuevo producto</h3><button class="ico-close" data-close-amy>✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="apmId" />
+        <div class="row">
+          <div class="field grow"><label>Nombre</label><input id="apmName" type="text" /></div>
+          <div class="field grow">
+            <label>Especie</label>
+            <select id="apmSpecies"><option>Perros</option><option>Gatos</option><option>General</option></select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>Categoría</label><input id="apmCategory" type="text" placeholder="Alimento, Snacks, Juguetes…" /></div>
+          <div class="field grow"><label>Precio ($)</label><input id="apmPrice" type="number" min="0" /></div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>Unidad (ej: 15 kg)</label><input id="apmUnit" type="text" /></div>
+          <div class="field grow"><label>Gramos (0 si no es alimento)</label><input id="apmGrams" type="number" min="0" /></div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>Stock inicial</label><input id="apmStock" type="number" min="0" /></div>
+          <div class="field grow"><label>Ración diaria (g/día)</label><input id="apmRation" type="number" min="0" /></div>
+        </div>
+        <div class="field"><label>Descripción</label><textarea id="apmDesc"></textarea></div>
+        <div class="field"><label>Tags (separadas por ;)</label><input id="apmTags" type="text" placeholder="top;nuevo" /></div>
+        <div class="field">
+          <label>Imagen (subir archivo)</label>
+          <input type="file" id="apmImage" accept="image/*" />
+          <div id="apmImagePreview" class="mt-2"></div>
+        </div>
+        <div class="field">
+          <label>Video (subir archivo, opcional)</label>
+          <input type="file" id="apmVideo" accept="video/*" />
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-amy>Cancelar</button>
+        <button class="btn btn-gold" id="btnSaveProduct">Guardar producto</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

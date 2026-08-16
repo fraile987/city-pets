@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+
+# Base de datos SQLite
+*.db
+*.db-journal
+*.sqlite
+
+# Variables de entorno / secretos
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operativo
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Cobertura / pruebas
+coverage/

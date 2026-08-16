@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#12355C"/>
+      <stop offset="100%" stop-color="#08142A"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#g)"/>
+  <circle cx="180" cy="300" r="120" fill="#ffffff" fill-opacity="0.06"/>
+  <g fill="#D4AF37" transform="translate(560,180)">
+    <ellipse cx="120" cy="100" rx="44" ry="38"/>
+    <ellipse cx="62" cy="34" rx="20" ry="26" transform="rotate(-28 62 34)"/>
+    <ellipse cx="120" cy="8" rx="20" ry="26"/>
+    <ellipse cx="180" cy="34" rx="20" ry="26" transform="rotate(28 180 34)"/>
+  </g>
+  <text x="80" y="520" font-family="Arial" font-size="52" font-weight="bold" fill="#FFFFFF">PERROS</text>
+  <text x="82" y="560" font-family="Arial" font-size="20" letter-spacing="4" fill="#F2C94C">CITY PETS · TU MASCOTA FELIZ</text>
+</svg>
