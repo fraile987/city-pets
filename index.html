@@ -164,6 +164,7 @@
             <div class="field grow"><label for="regPhone">Línea móvil</label><input id="regPhone" type="tel" placeholder="Ej: 300 123 4567" /></div>
             <div class="field grow"><label for="regEmail">Correo electrónico</label><input id="regEmail" type="email" placeholder="Ej: maria@correo.com" /></div>
           </div>
+          <div class="field"><label for="regPassword">Contraseña</label><input id="regPassword" type="password" placeholder="Crea una contraseña" /></div>
           <div class="field">
             <label for="regChannel">¿Cómo llegaste a City Pets? <span class="muted">(atribución)</span></label>
             <select id="regChannel">
@@ -171,6 +172,19 @@
             </select>
           </div>
           <button class="btn btn-navy" id="btnRegister">Registrarme</button>
+          <button class="btn btn-outline btn-block mt-2" id="btnGoLogin">¿Ya tienes cuenta? Inicia sesión</button>
+        </div>
+
+        <!-- Inicio de sesión -->
+        <div class="panel hidden" id="loginPanel">
+          <div class="panel-header">
+            <h3>Iniciar sesión</h3>
+            <span class="badge badge-gold">Bienvenido de nuevo</span>
+          </div>
+          <div class="field"><label for="logEmail">Correo electrónico</label><input id="logEmail" type="email" placeholder="Ej: maria@correo.com" /></div>
+          <div class="field"><label for="logPassword">Contraseña</label><input id="logPassword" type="password" placeholder="Tu contraseña" /></div>
+          <button class="btn btn-navy" id="btnLogin">Entrar</button>
+          <button class="btn btn-outline btn-block mt-2" id="btnGoRegister">¿No tienes cuenta? Regístrate</button>
         </div>
 
         <!-- Panel del usuario logueado -->

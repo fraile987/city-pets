@@ -84,4 +84,32 @@ async function me(req, res) {
   res.json({ user: publicUser(req.user) });
 }
 
-module.exports = { register, login, me };
+async function updateMe(req, res) {
+  const { name, phone, email, address } = req.body;
+  const data = {};
+
+  if (name !== undefined) {
+    if (typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'El nombre no es válido' });
+    }
+    data.name = name.trim();
+  }
+  if (phone !== undefined) data.phone = typeof phone === 'string' ? phone.trim() : '';
+  if (address !== undefined) data.address = typeof address === 'string' ? address.trim() : '';
+  if (email !== undefined) {
+    const normalizedEmail = email.toLowerCase().trim();
+    if (!normalizedEmail) {
+      return res.status(400).json({ error: 'El correo no es válido' });
+    }
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existing && existing.id !== req.user.id) {
+      return res.status(409).json({ error: 'Ya existe una cuenta con ese correo' });
+    }
+    data.email = normalizedEmail;
+  }
+
+  const user = await prisma.user.update({ where: { id: req.user.id }, data });
+  res.json({ user: publicUser(user) });
+}
+
+module.exports = { register, login, me, updateMe };

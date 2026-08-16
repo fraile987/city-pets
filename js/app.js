@@ -9,8 +9,7 @@
   /* ---------- Init ---------- */
   document.addEventListener('DOMContentLoaded', init);
 
-  function init() {
-    seedProducts();
+  async function init() {
     populateChannels();
     bindNavigation();
     bindHero();
@@ -21,11 +20,34 @@
     bindPets();
     bindTools();
     renderCart();
+    renderFeedbackList();
+    await Promise.all([initSession(), loadProducts()]);
     refreshSessionUI();
+    refreshProfileView();
     renderProducts();
     fillCalcSelects();
-    fillRecommendations();
-    renderFeedbackList();
+    await fillRecommendations();
+  }
+
+  /* ---------- Sesión y catálogo desde el backend ---------- */
+  async function initSession() {
+    if (!getToken()) { App.setCurrentUser(null); return; }
+    try {
+      const data = await api('/auth/me');
+      App.setCurrentUser(data.user);
+    } catch {
+      setToken(null);
+      App.setCurrentUser(null);
+    }
+  }
+
+  async function loadProducts() {
+    try {
+      const products = await api('/products', { auth: false });
+      App.products = products;
+    } catch {
+      toast('No se pudo cargar el catálogo', 'error');
+    }
   }
 
   /* ---------- Toasts ---------- */
@@ -306,49 +328,33 @@
     $('#cashChange').textContent = change > 0 ? fmtMoney(change) : 'No aplica cambio';
   }
 
-  function confirmOrder() {
+  async function confirmOrder() {
     const user = App.currentUser();
-    const { items, subtotal, delivery, total } = cartTotals();
+    const { items } = cartTotals();
     if (!user || !items.length) return;
     const address = $('#checkoutAddress').value.trim();
     if (!address) { toast('Indica la dirección de entrega', 'error'); return; }
 
-    const order = {
-      id: uid('ORD'),
-      userId: user.id,
-      userName: user.name,
-      phone: user.phone,
+    const payload = {
+      items: items.map(i => ({ productId: i.p.id, qty: i.qty })),
       address,
-      items: items.map(i => ({ id: i.p.id, name: i.p.name, qty: i.qty, price: i.p.price, image: i.p.images[0] })),
-      subtotal, delivery, total,
-      createdAt: new Date().toISOString(),
-      slotGenerated: getCurrentSlot(),
-      deliverySlot: computedDelivery.slot,
-      deliveryDate: computedDelivery.deliveryDate,
-      deliveryLabel: computedDelivery.dateLabel,
       payment: selectedPay === 'efectivo'
         ? { method: 'efectivo', denomination: parseInt($('#cashDenom').value || 0, 10) }
-        : { method: 'digital' },
-      status: 'pendiente'
+        : { method: 'digital' }
     };
 
-    /* Descontar inventario */
-    const prods = App.products.map(p => {
-      const it = items.find(i => i.id === p.id);
-      return it ? { ...p, stock: p.stock - it.qty } : p;
-    });
-    App.products = prods;
-
-    const orders = App.orders;
-    orders.push(order);
-    App.orders = orders;
-    App.cart = [];
-
-    closeModals();
-    $('#cartDrawer').classList.remove('open');
-    renderCart();
-    toast(`¡Pedido ${order.id} confirmado! Entrega ${computedDelivery.name} — ${order.deliveryLabel}.`, 'success');
-    AppNav('historial');
+    try {
+      const order = await api('/orders', { method: 'POST', body: payload });
+      App.cart = [];
+      closeModals();
+      $('#cartDrawer').classList.remove('open');
+      renderCart();
+      loadProducts();
+      toast(`¡Pedido ${order.id} confirmado! Entrega ${order.deliverySlot === 'manana' ? '🌅 Mañana' : '🌇 Tarde'} — ${order.deliveryLabel}.`, 'success');
+      AppNav('historial');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
   }
 
   /* ---------- Perfil / Sesión ---------- */
@@ -361,41 +367,80 @@
   }
 
   function bindProfile() {
-    $('#btnRegister').addEventListener('click', () => {
+    $('#btnRegister').addEventListener('click', async () => {
       const name = $('#regName').value.trim();
       const phone = $('#regPhone').value.trim();
       const email = $('#regEmail').value.trim();
+      const password = $('#regPassword').value;
       const channel = $('#regChannel').value;
-      if (!name || !phone || !email) { toast('Completa nombre, móvil y correo', 'error'); return; }
-      if (App.users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-        toast('Ya existe una cuenta con ese correo. Usa el inicio de sesión.', 'error'); return;
+      if (!name || !phone || !email || !password) { toast('Completa nombre, móvil, correo y contraseña', 'error'); return; }
+      try {
+        const data = await api('/auth/register', { method: 'POST', body: { name, phone, email, password, channel: channel || 'Directo' } });
+        setToken(data.token);
+        App.setCurrentUser(data.user);
+        $('#regName').value = $('#regPhone').value = $('#regEmail').value = $('#regPassword').value = '';
+        toast('¡Cuenta creada! Bienvenido a City Pets 🐾', 'success');
+        refreshSessionUI();
+        refreshProfileView();
+        AppNav('perfil');
+      } catch (e) {
+        toast(e.message, 'error');
       }
-      const user = { id: uid('USR'), name, phone, email, address: '', pets: [], channel: channel || 'Directo', createdAt: new Date().toISOString() };
-      App.users = [...App.users, user];
-      App.attributions = [...App.attributions, { userId: user.id, channel: channel || 'Directo', date: new Date().toISOString() }];
-      App.session = user.id;
-      $('#regName').value = $('#regPhone').value = $('#regEmail').value = '';
-      toast('¡Cuenta creada! Bienvenido a City Pets 🐾', 'success');
-      refreshSessionUI();
-      refreshProfileView();
-      AppNav('perfil');
     });
 
-    $('#btnSaveProfile').addEventListener('click', () => {
+    $('#btnGoLogin').addEventListener('click', () => {
+      $('#registerPanel').classList.add('hidden');
+      $('#loginPanel').classList.remove('hidden');
+    });
+
+    $('#btnGoRegister').addEventListener('click', () => {
+      $('#loginPanel').classList.add('hidden');
+      $('#registerPanel').classList.remove('hidden');
+    });
+
+    $('#btnLogin').addEventListener('click', async () => {
+      const email = $('#logEmail').value.trim();
+      const password = $('#logPassword').value;
+      if (!email || !password) { toast('Indica correo y contraseña', 'error'); return; }
+      try {
+        const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+        setToken(data.token);
+        App.setCurrentUser(data.user);
+        $('#logEmail').value = $('#logPassword').value = '';
+        toast('¡Sesión iniciada! 🐾', 'success');
+        refreshSessionUI();
+        refreshProfileView();
+        AppNav('perfil');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
+
+    $('#btnSaveProfile').addEventListener('click', async () => {
       const user = App.currentUser();
       if (!user) return;
-      user.name = $('#profName').value.trim();
-      user.phone = $('#profPhone').value.trim();
-      user.email = $('#profEmail').value.trim();
-      user.address = $('#profAddress') ? $('#profAddress').value.trim() : user.address;
-      App.users = App.users.map(u => u.id === user.id ? user : u);
-      toast('Perfil actualizado', 'success');
-      refreshSessionUI();
-      refreshProfileView();
+      try {
+        const data = await api('/auth/me', {
+          method: 'PUT',
+          body: {
+            name: $('#profName').value.trim(),
+            phone: $('#profPhone').value.trim(),
+            email: $('#profEmail').value.trim(),
+            address: $('#profAddress') ? $('#profAddress').value.trim() : ''
+          }
+        });
+        App.setCurrentUser(data.user);
+        toast('Perfil actualizado', 'success');
+        refreshSessionUI();
+        refreshProfileView();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
     });
 
     $('#btnLogout').addEventListener('click', () => {
-      App.session = null;
+      setToken(null);
+      App.setCurrentUser(null);
       toast('Sesión cerrada');
       refreshSessionUI();
       refreshProfileView();
@@ -410,7 +455,13 @@
 
   function refreshProfileView() {
     const user = App.currentUser();
-    $('#registerPanel').classList.toggle('hidden', !!user);
+    if (user) {
+      $('#registerPanel').classList.add('hidden');
+      $('#loginPanel').classList.add('hidden');
+    } else {
+      $('#registerPanel').classList.remove('hidden');
+      $('#loginPanel').classList.add('hidden');
+    }
     $('#profilePanel').classList.toggle('hidden', !user);
     $('#petsPanel').classList.remove('hidden');
     $('#loginPetHint').classList.toggle('hidden', !!user);
@@ -426,10 +477,10 @@
 
   /* ---------- Mascotas ---------- */
   let editingPetId = null;
+  let petsCache = [];
   function bindPets() {
     $('#btnAddPet').addEventListener('click', () => {
-      const user = App.currentUser();
-      if (!user) { toast('Regístrate primero', 'error'); AppNav('perfil'); return; }
+      if (!App.currentUser()) { toast('Regístrate primero', 'error'); AppNav('perfil'); return; }
       editingPetId = null;
       $('#petModalTitle').textContent = 'Añadir mascota';
       $('#petName').value = $('#petBreed').value = $('#petAge').value = $('#petRation').value = $('#petWeight').value = '';
@@ -440,59 +491,27 @@
       const edit = e.target.closest('[data-edit-pet]');
       const del = e.target.closest('[data-del-pet]');
       if (!edit && !del) return;
-      const user = App.currentUser();
-      if (!user) return;
       const id = (edit || del).dataset[del ? 'delPet' : 'editPet'];
-      if (del) {
-        user.pets = user.pets.filter(p => p.id !== id);
-        App.users = App.users.map(u => u.id === user.id ? user : u);
-        toast('Mascota eliminada');
-        renderPets();
-        return;
-      }
-      const pet = user.pets.find(p => p.id === id);
-      if (!pet) return;
-      editingPetId = id;
-      $('#petModalTitle').textContent = 'Editar mascota';
-      $('#petName').value = pet.name;
-      $('#petSpecies').value = pet.species;
-      $('#petBreed').value = pet.breed;
-      $('#petAge').value = pet.age;
-      $('#petRation').value = pet.ration;
-      $('#petWeight').value = pet.weight || '';
-      openModal('#petModal');
+      if (del) { deletePet(id); return; }
+      openPetModal(id);
     });
-    $('#btnSavePet').addEventListener('click', () => {
-      const user = App.currentUser();
-      if (!user) return;
-      const name = $('#petName').value.trim();
-      const species = $('#petSpecies').value;
-      const breed = $('#petBreed').value.trim();
-      const age = parseFloat($('#petAge').value);
-      const ration = parseFloat($('#petRation').value) || 0;
-      const weight = parseFloat($('#petWeight').value) || null;
-      if (!name || isNaN(age)) { toast('Completa nombre y edad', 'error'); return; }
-      const pet = { id: editingPetId || uid('PET'), name, species, breed, age, ration, weight };
-      if (editingPetId) {
-        user.pets = user.pets.map(p => p.id === editingPetId ? pet : p);
-      } else {
-        user.pets = [...user.pets, pet];
-      }
-      App.users = App.users.map(u => u.id === user.id ? user : u);
-      toast('Mascota guardada 🐾', 'success');
-      closeModals();
-      renderPets();
-    });
+    $('#btnSavePet').addEventListener('click', savePet);
   }
 
-  function renderPets() {
-    const user = App.currentUser();
+  async function renderPets() {
     const grid = $('#petsGrid');
-    if (!user || user.pets.length === 0) {
+    if (!App.currentUser()) {
+      petsCache = [];
       grid.innerHTML = `<p class="muted">Aún no registras mascotas.</p>`;
       return;
     }
-    grid.innerHTML = user.pets.map(p => `
+    try {
+      petsCache = await api('/pets');
+      if (!petsCache.length) {
+        grid.innerHTML = `<p class="muted">Aún no registras mascotas.</p>`;
+        return;
+      }
+      grid.innerHTML = petsCache.map(p => `
       <div class="panel" style="margin:0">
         <div style="font-size:2rem">${p.species === 'Perros' ? '🐕' : '🐈'}</div>
         <h4 class="mt-2">${p.name}</h4>
@@ -503,24 +522,77 @@
           <button class="btn btn-outline btn-sm" style="color:var(--red-500);border-color:var(--red-500)" data-del-pet="${p.id}">Eliminar</button>
         </div>
       </div>`).join('');
+    } catch {
+      grid.innerHTML = `<p class="muted">No se pudieron cargar tus mascotas.</p>`;
+    }
+  }
+
+  function openPetModal(id) {
+    const p = petsCache.find(x => x.id === id);
+    if (!p) return;
+    editingPetId = id;
+    $('#petModalTitle').textContent = 'Editar mascota';
+    $('#petName').value = p.name;
+    $('#petSpecies').value = p.species;
+    $('#petBreed').value = p.breed;
+    $('#petAge').value = p.age;
+    $('#petRation').value = p.ration;
+    $('#petWeight').value = p.weight || '';
+    openModal('#petModal');
+  }
+
+  async function deletePet(id) {
+    try {
+      await api('/pets/' + id, { method: 'DELETE' });
+      toast('Mascota eliminada');
+      renderPets();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  async function savePet() {
+    if (!App.currentUser()) return;
+    const name = $('#petName').value.trim();
+    const species = $('#petSpecies').value;
+    const breed = $('#petBreed').value.trim();
+    const age = parseFloat($('#petAge').value);
+    const ration = parseFloat($('#petRation').value) || 0;
+    const weight = parseFloat($('#petWeight').value) || null;
+    if (!name || isNaN(age)) { toast('Completa nombre y edad', 'error'); return; }
+    const body = { name, species, breed, age, ration, weight };
+    try {
+      if (editingPetId) {
+        await api('/pets/' + editingPetId, { method: 'PUT', body });
+        toast('Mascota actualizada 🐾', 'success');
+      } else {
+        await api('/pets', { method: 'POST', body });
+        toast('Mascota guardada 🐾', 'success');
+      }
+      closeModals();
+      renderPets();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
   }
 
   /* ---------- Historial ---------- */
-  function renderOrders() {
+  async function renderOrders() {
     const user = App.currentUser();
     const wrap = $('#ordersList');
     $('#loginHistHint').classList.toggle('hidden', !!user);
     if (!user) { wrap.innerHTML = ''; return; }
-    const orders = App.orders.filter(o => o.userId === user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    if (!orders.length) {
-      wrap.innerHTML = `<div class="panel ta-center"><p class="muted">Aún no has realizado pedidos.</p><button class="btn btn-gold mt-3" data-nav="tienda">Ir a la tienda</button></div>`;
-      return;
-    }
-    const statusBadge = (s) => s === 'entregado' ? '<span class="badge badge-green">Entregado</span>'
-      : s === 'incidente' ? '<span class="badge badge-red">Incidente</span>'
-      : '<span class="badge badge-gold">Pendiente por entregar</span>';
+    try {
+      const orders = await api('/orders');
+      if (!orders.length) {
+        wrap.innerHTML = `<div class="panel ta-center"><p class="muted">Aún no has realizado pedidos.</p><button class="btn btn-gold mt-3" data-nav="tienda">Ir a la tienda</button></div>`;
+        return;
+      }
+      const statusBadge = (s) => s === 'entregado' ? '<span class="badge badge-green">Entregado</span>'
+        : s === 'incidente' ? '<span class="badge badge-red">Incidente</span>'
+        : '<span class="badge badge-gold">Pendiente por entregar</span>';
 
-    wrap.innerHTML = orders.map(o => `
+      wrap.innerHTML = orders.map(o => `
       <div class="panel">
         <div class="panel-header">
           <div>
@@ -550,6 +622,9 @@
           </div>
         </div>
       </div>`).join('');
+    } catch {
+      wrap.innerHTML = `<div class="panel ta-center"><p class="muted">No se pudieron cargar tus pedidos.</p></div>`;
+    }
   }
 
   /* ---------- Herramientas ---------- */
@@ -619,11 +694,17 @@
     $('#btnFeedback').addEventListener('click', submitFeedback);
   }
 
-  function fillRecommendations() {
+  async function fillRecommendations() {
     const user = App.currentUser();
     let list = App.products;
-    if (user && user.pets.length) {
-      const species = user.pets.map(p => p.species);
+    let species = [];
+    if (user) {
+      try {
+        const pets = petsCache.length ? petsCache : await api('/pets');
+        species = pets.map(p => p.species);
+      } catch { species = []; }
+    }
+    if (species.length) {
       list = list.filter(p => species.includes(p.species));
       const pref = list.filter(p => p.tags.includes('top'));
       if (pref.length) list = pref.concat(list.filter(p => !p.tags.includes('top')));

@@ -15,6 +15,39 @@ const STORE = {
 const DELIVERY_COST = 8000;
 const CHANNELS = ['Instagram', 'Facebook', 'WhatsApp', 'TikTok', 'Google', 'Referido', 'Directo'];
 
+/* =========================================================
+   Cliente HTTP hacia el backend (Fase 7.1)
+   La sesión ahora se mantiene con el token JWT en cp_session.
+   ========================================================= */
+const API_BASE = 'http://localhost:3000/api';
+
+function getToken() {
+  try { return localStorage.getItem(STORE.session); } catch { return null; }
+}
+function setToken(token) {
+  try {
+    if (token) localStorage.setItem(STORE.session, token);
+    else localStorage.removeItem(STORE.session);
+  } catch { /* noop */ }
+}
+
+async function api(path, { method = 'GET', body, auth = true } = {}) {
+  const headers = {};
+  if (auth) {
+    const token = getToken();
+    if (token) headers.Authorization = 'Bearer ' + token;
+  }
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const res = await fetch(API_BASE + path, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Error de conexión con el servidor');
+  return data;
+}
+
 /* Franjas horarias */
 const SLOTS = [
   { id: 'manana', name: 'Mañana', hours: '06:00 – 13:00', dayOffset: 0 },
@@ -101,11 +134,11 @@ const App = {
   get attributions() { return dbRead(STORE.attributions, []); },
   set attributions(v) { dbWrite(STORE.attributions, v); },
 
-  currentUser() {
-    const id = this.session;
-    return this.users.find(u => u.id === id) || null;
-  }
+  currentUser() { return _currentUser; },
+  setCurrentUser(u) { _currentUser = u || null; }
 };
+
+let _currentUser = null;
 
 /* ============ Utilidades ============ */
 function fmtMoney(n) {
