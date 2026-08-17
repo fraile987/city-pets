@@ -19,11 +19,12 @@
     bindProfile();
     bindPets();
     bindTools();
-    renderCart();
     renderFeedbackList();
     await Promise.all([initSession(), loadProducts()]);
     refreshSessionUI();
     refreshProfileView();
+    normalizeCart();
+    renderCart();
     renderProducts();
     fillCalcSelects();
     await fillRecommendations();
@@ -175,6 +176,23 @@
   }
 
   /* ---------- Carrito ---------- */
+  function normalizeCart() {
+    const raw = App.cart;
+    if (!Array.isArray(raw) || !raw.length) { App.cart = []; return []; }
+    const clean = [];
+    for (const c of raw) {
+      if (!c || typeof c.id !== 'string') continue;
+      const p = App.products.find(x => x.id === c.id);
+      if (!p) continue;
+      if (p.stock <= 0) continue;
+      const qty = Math.min(Math.max(1, parseInt(c.qty, 10) || 1), p.stock);
+      clean.push({ id: p.id, qty });
+    }
+    const changed = clean.length !== raw.length || clean.some((c, i) => c.qty !== raw[i].qty);
+    if (changed) App.cart = clean;
+    return clean;
+  }
+
   function addToCart(id) {
     const p = App.products.find(x => x.id === id);
     if (!p) return;
