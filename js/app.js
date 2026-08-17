@@ -676,12 +676,20 @@
       $('#calcGrams').value = o.dataset.grams;
       $('#calcRation').value = o.dataset.ration;
     });
-    $('#compProduct').addEventListener('change', (e) => {
-      const o = e.target.selectedOptions[0];
+    const syncComp = () => {
+      const o = $('#compProduct').selectedOptions[0];
       if (!o) return;
-      $('#compGrams').value = o.dataset.grams;
-      $('#compRation').value = o.dataset.ration;
-    });
+      $('#compGrams').value = o.dataset.grams / 1000;
+    };
+    $('#compProduct').addEventListener('change', syncComp);
+    const toggleCompGrams = () => {
+      $('#compGramsField').style.display = $('#compSame').checked ? 'none' : '';
+      syncComp();
+      $('#compResult').innerHTML = '';
+    };
+    $('#compSame').addEventListener('change', toggleCompGrams);
+    syncComp();
+    toggleCompGrams();
   }
 
   function bindTools() {
@@ -705,15 +713,18 @@
     $('#btnCompare').addEventListener('click', () => {
       const opt = $('#compProduct').selectedOptions[0];
       const p = opt ? App.products.find(x => x.id === opt.value) : null;
+      if (!p) { toast('Selecciona un producto City Pets', 'error'); return; }
+      const same = $('#compSame').checked;
       const compPrice = parseFloat($('#compPrice').value);
-      const compGrams = parseFloat($('#compGrams').value);
-      const compRation = parseFloat($('#compRation').value);
-      if (!p || isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0 || isNaN(compRation) || compRation <= 0) {
-        toast('Completa precio, gramaje y ración (positivos)', 'error');
+      const compGrams = same ? p.grams : parseFloat($('#compGrams').value) * 1000;
+      const ration = p.dailyRation;
+      if (isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0 || isNaN(ration) || ration <= 0) {
+        toast('Completa precio y gramaje de la competencia (positivos)', 'error');
         return;
       }
       const cpPrice = p.price;
       const cpGrams = p.grams;
+      const fmtKg = (g) => `${Number(g / 1000).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg`;
       const cpPerKg = cpPrice / cpGrams * 1000;
       const compPerKg = compPrice / compGrams * 1000;
       const diff = cpPerKg - compPerKg;
@@ -723,29 +734,29 @@
       const diffColor = equal ? 'var(--navy-800)' : cheaper ? 'var(--green-600)' : 'var(--red-500)';
       const diffLabel = equal
         ? 'Sin diferencia'
-        : `${fmtMoney(Math.round(Math.abs(diff)))}/kg ${cheaper ? 'a favor de City Pets' : 'a favor del competidor'}`;
-      const annualKg = compRation * 365 / 1000;
+        : `${fmtMoney(Math.round(Math.abs(diff)))}/kg ${cheaper ? 'a favor de City Pets' : 'a favor de la competencia'}`;
+      const annualKg = ration * 365 / 1000;
       const cpAnnual = cpPerKg * annualKg;
       const compAnnual = compPerKg * annualKg;
       const savings = compAnnual - cpAnnual;
       const savingsLabel = equal
         ? 'Sin ahorro anual'
         : cheaper
-          ? `✅ ${fmtMoney(Math.round(savings))} al año (${pct}%)`
-          : `⚠️ ${fmtMoney(Math.round(Math.abs(savings)))} más al año (${pct}%)`;
+          ? `Ahorro anual: ${fmtMoney(Math.round(savings))}`
+          : `${fmtMoney(Math.round(Math.abs(savings)))} más al año`;
       $('#compResult').innerHTML = `
         <div class="panel" style="background:var(--cloud)">
-          <div class="muted" style="font-size:.85rem;margin-bottom:.5rem">${esc(p.name)} · ${esc(p.unit)}</div>
+          <div class="muted" style="font-size:.85rem;margin-bottom:.5rem">${esc(p.name)} · ${esc(p.unit)}${same ? ' — Referencia: mismo producto / mismas características' : ''}</div>
           <div class="row" style="justify-content:space-between">
             <div class="ta-center grow">
               <div class="muted" style="font-size:.75rem">CITY PETS</div>
               <div style="font-size:1.4rem;font-weight:800;color:var(--navy-800)" class="money">${fmtMoney(cpPrice)}</div>
-              <div class="muted" style="font-size:.72rem">${fmtMoney(Math.round(cpPerKg))}/kg · ${cpGrams} g</div>
+              <div class="muted" style="font-size:.72rem">${fmtMoney(Math.round(cpPerKg))}/kg · ${fmtKg(cpGrams)}</div>
             </div>
             <div class="ta-center grow">
-              <div class="muted" style="font-size:.75rem">COMPETIDOR</div>
+              <div class="muted" style="font-size:.75rem">COMPETENCIA</div>
               <div style="font-size:1.4rem;font-weight:800;color:var(--gray-700)" class="money">${fmtMoney(compPrice)}</div>
-              <div class="muted" style="font-size:.72rem">${fmtMoney(Math.round(compPerKg))}/kg · ${compGrams} g</div>
+              <div class="muted" style="font-size:.72rem">${fmtMoney(Math.round(compPerKg))}/kg · ${fmtKg(compGrams)}</div>
             </div>
           </div>
           <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
@@ -757,16 +768,16 @@
               ${equal
                 ? '⚖️ Mismo precio por kg'
                 : cheaper
-                  ? `✅ Ahorro: City Pets es ${pct}% más económico por kg`
-                  : `⚠️ City Pets cuesta ${pct}% más por kg`}
+                  ? `✅ City Pets es ${pct}% más económico`
+                  : `⚠️ City Pets es ${pct}% más caro`}
             </div>
           </div>
           <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
             <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
-            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Basado en una ración de ${compRation} g/día y 365 días de consumo.</div>
+            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Basado en una ración de ${ration} g/día y 365 días de consumo.</div>
             <div class="summary-line"><span>Consumo anual</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
             <div class="summary-line"><span>City Pets al año</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
-            <div class="summary-line"><span>Competidor al año</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
+            <div class="summary-line"><span>Competencia al año</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
             <div class="summary-line"><span>Ahorro anual</span><span style="font-weight:800;color:${diffColor}">${savingsLabel}</span></div>
           </div>
         </div>`;

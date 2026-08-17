@@ -267,25 +267,25 @@
 
         <div class="panel">
           <div class="panel-header"><h3>⚖️ Calculadora comparativa de precios</h3></div>
-          <p class="muted mb-3">Compara el precio por gramo/kilogramo de City Pets frente a otros almacenes y estima el ahorro anual según la ración diaria de tu mascota.</p>
+          <p class="muted mb-3">Compara el precio por kilogramo de City Pets frente a otros almacenes y estima tu ahorro anual según la ración diaria del producto.</p>
           <div class="row">
             <div class="field grow">
               <label for="compProduct">Producto City Pets</label>
               <select id="compProduct"></select>
             </div>
             <div class="field grow">
-              <label for="compPrice">Precio competidor</label>
-              <input id="compPrice" type="number" min="1" placeholder="Precio del mismo producto en otro almacén" />
+              <label for="compPrice">Precio competencia</label>
+              <input id="compPrice" type="number" min="1" placeholder="Precio en otro almacén" autocomplete="off" />
             </div>
-            <div class="field grow">
-              <label for="compGrams">Gramaje equivalente (g)</label>
-              <input id="compGrams" type="number" min="1" placeholder="Ej: 15000" />
-            </div>
-            <div class="field grow">
-              <label for="compRation">Ración diaria de tu mascota (g/día)</label>
-              <input id="compRation" type="number" min="1" placeholder="Ej: 210" />
+            <div class="field grow" id="compGramsField">
+              <label for="compGrams">Gramaje equivalente (kg)</label>
+              <input id="compGrams" type="number" min="0.1" step="0.1" placeholder="Ej: 12" autocomplete="off" />
             </div>
           </div>
+          <label class="checkbox-row" style="cursor:pointer;margin-bottom:14px">
+            <input type="checkbox" id="compSame" checked />
+            <span>Mismo producto / mismas características</span>
+          </label>
           <button class="btn btn-navy" id="btnCompare">Comparar</button>
           <div class="mt-3" id="compResult"></div>
         </div>
