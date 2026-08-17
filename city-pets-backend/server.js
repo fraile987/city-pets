@@ -49,8 +49,8 @@ app.set('trust proxy', IS_PROD ? 1 : false);
    Helmet con CSP adaptada a City Pets:
    - style-src 'unsafe-inline' porque la interfaz usa estilos inline
      (se retirará en una fase futura para endurecer la política).
-   - img-src permite picsum.photos (imágenes seed y fallback del admin)
-     y data:/blob: (imágenes subidas como base64).
+   - img-src permite el catálogo local ('self'), data: y blob:
+     (previsualización de archivos en el admin). Sin dependencias externas.
    - COEP desactivado: requiere-CORP bloquearía las imágenes externas.
    - HSTS NO activado: solo se habilitará cuando el sitio esté bajo HTTPS. */
 app.use(helmet({
@@ -61,7 +61,7 @@ app.use(helmet({
       'default-src': ["'self'"],
       'script-src': ["'self'"],
       'style-src': ["'self'", "'unsafe-inline'"],
-      'img-src': ["'self'", 'data:', 'blob:', 'https://*.picsum.photos'],
+      'img-src': ["'self'", 'data:', 'blob:'],
       'media-src': ["'self'", 'data:', 'blob:'],
       'connect-src': ["'self'"],
       'font-src': ["'self'"],

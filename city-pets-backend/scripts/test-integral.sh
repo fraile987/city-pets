@@ -219,7 +219,7 @@ R=$(req /admin/attribution "$TANA")
 check "admin atribucion 200" "$(code_of "$R")" "200"
 check "canal Instagram en atribucion" "$(echo "$R" | body_of | json 'j.channels.map(c=>c.channel).includes("Instagram")')" "true"
 check "detalle atribucion con usuario" "$(echo "$R" | body_of | json 'j.detail.some(d=>d.userName==="Ana Renombrada")')" "true"
-R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"Admin crea X","species":"Perros","category":"Snacks","price":9900,"stock":25,"tags":["nuevo"],"images":["https://picsum.photos/seed/admx/600/450"]}')
+R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"Admin crea X","species":"Perros","category":"Snacks","price":9900,"stock":25,"tags":["nuevo"],"images":["/uploads/products/p1.jpg"]}')
 check "admin crea producto 201" "$(code_of "$R")" "201"
 PIDNEW=$(echo "$R" | body_of | json 'j.id')
 check "producto en catalogo (15)" "$(req /products | body_of | json 'j.length')" "15"
@@ -387,7 +387,7 @@ CSP=$(hdr "$ROOT/" content-security-policy)
 check "CSP default-src 'self'" "$(echo "$CSP" | grep -o "default-src '[^']*'")" "default-src 'self'"
 check "CSP script-src 'self'" "$(echo "$CSP" | grep -o "script-src '[^']*'")" "script-src 'self'"
 check "CSP style-src con unsafe-inline" "$(echo "$CSP" | grep -o 'style-src [^;]*')" "style-src 'self' 'unsafe-inline'"
-check "CSP img-src con picsum" "$(echo "$CSP" | grep -o 'img-src [^;]*')" "img-src 'self' data: blob: https://*.picsum.photos"
+check "CSP img-src sin picsum (self data blob)" "$(echo "$CSP" | grep -o 'img-src [^;]*')" "img-src 'self' data: blob:"
 check "CSP media-src data/blob" "$(echo "$CSP" | grep -o 'media-src [^;]*')" "media-src 'self' data: blob:"
 check "CSP connect-src 'self'" "$(echo "$CSP" | grep -o "connect-src '[^']*'")" "connect-src 'self'"
 check "CSP object-src 'none'" "$(echo "$CSP" | grep -o "object-src '[^']*'")" "object-src 'none'"
@@ -1095,4 +1095,22 @@ AFTER_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
 kill "$PX_PID" 2>/dev/null; wait "$PX_PID" 2>/dev/null
 kill "$SUP_PID" 2>/dev/null; wait "$SUP_PID" 2>/dev/null
 rm -rf "$SBOX"
+
+echo ""
+echo "===== G21. Fase B4: sin dependencia externa de imágenes (picsum) ====="
+CSP=$(hdr "$ROOT/" content-security-policy)
+if ! echo "$CSP" | grep -qi 'picsum'; then ok "B4: CSP img-src sin picsum.photos"; else ko "B4: CSP img-src contiene picsum.photos"; fi
+REFS=$(grep -RniE 'picsum' \
+  ../js ../css ../index.html ../admin.html ../assets \
+  server.js src scripts deploy assets prisma \
+  --include='*.js' --include='*.css' --include='*.html' --include='*.json' \
+  --include='*.sh' --include='*.md' --include='*.conf' --include='*.service' \
+  --include='*.timer' --include='*.svg' --include='*.prisma' --include='*.sql' \
+  --exclude='test-integral.sh' 2>/dev/null || true)
+[ -z "$REFS" ] && ok "B4: 0 referencias a picsum en el codigo fuente" || ko "B4: quedan referencias a picsum: $(echo "$REFS" | head -3 | tr '\n' ' ')"
+if grep -q 'IMG_PLACEHOLDER' ../js/data.js && grep -q 'IMG_PLACEHOLDER' ../js/app.js && grep -q 'IMG_PLACEHOLDER' ../js/admin.js; then
+  ok "B4: frontend usa fallback local de imagen (sin imagen)"
+else
+  ko "B4: falta fallback local de imagen en el frontend"
+fi
 [ "$FAIL" -eq 0 ]

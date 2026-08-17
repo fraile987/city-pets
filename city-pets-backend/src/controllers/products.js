@@ -56,8 +56,7 @@ function cap(v, max) {
 
 /* ---- Medios (Fase 9.5B) ----
    Solo se aceptan URLs (rutas /uploads/ o http(s)), nunca Base64/data:.
-   El adaptador de almacenamiento genera las rutas; el catálogo seed y el
-   fallback de desarrollo usan https (picsum). */
+   El adaptador de almacenamiento genera las rutas del catálogo local. */
 function isMediaUrl(v) {
   return typeof v === 'string' && (v.startsWith('/uploads/') || /^https?:\/\//i.test(v));
 }

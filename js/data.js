@@ -11,6 +11,9 @@ const STORE = {
 const DELIVERY_COST = 8000;
 const CHANNELS = ['Instagram', 'Facebook', 'WhatsApp', 'TikTok', 'Google', 'Referido', 'Directo'];
 
+/* Imagen local mostrada cuando un producto no tiene imagen (B4). */
+const IMG_PLACEHOLDER = '/assets/img-placeholder.svg';
+
 /* =========================================================
    Cliente HTTP hacia el backend (Fase 7.1)
    La sesión ahora se mantiene con el token JWT en cp_session.

@@ -2,14 +2,14 @@
 
 Imágenes locales usadas por el seed (B1/B2). El seed las copia a
 `UPLOADS_ROOT/products/` (idempotente) y los productos referencian
-`/uploads/products/p<id>.jpg` en vez de URLs externas de picsum.
+`/uploads/products/p<id>.jpg` en vez de URLs externas.
 
 ## Origen y licencia
 
-Descargadas el 2026-08-17 desde `https://picsum.photos/seed/<seed>/600/450`
-usando los mismos seeds que tenía el catálogo original (`dogfood1`, ...,
-`wetdog`). Las imágenes de Picsum provienen de Unsplash y están cubiertas
-por la [Licencia Unsplash](https://unsplash.com/license), que permite uso
+Descargadas el 2026-08-17 desde un servicio de imágenes de muestra usando
+los mismos seeds que tenía el catálogo original (`dogfood1`, ...,
+`wetdog`). Las imágenes provienen de Unsplash y están cubiertas por la
+[Licencia Unsplash](https://unsplash.com/license), que permite uso
 comercial y personal sin permiso ni atribución, y permite editar las
 imágenes. No está permitido revenderlas sin alterar, compilarlas para
 replicar un servicio similar, ni usarlas en IA/bioetría (restricciones

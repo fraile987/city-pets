@@ -135,7 +135,7 @@
     grid.innerHTML = list.map(p => `
       <article class="card" data-product="${p.id}">
         <div class="card-media">
-          <img src="${esc(p.images[0])}" alt="${esc(p.name)}" loading="lazy" />
+          <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" loading="lazy" />
           ${p.tags.includes('top') ? '<span class="tag-badge">Destacado</span>' : ''}
           <span class="stock-badge">${p.stock} en bodega</span>
         </div>
@@ -160,7 +160,7 @@
     if (!p) return;
     $('#pmTitle').textContent = p.name;
     $('#pmBody').innerHTML = `
-      <img src="${esc(p.images[0])}" alt="${esc(p.name)}" style="border-radius:10px;aspect-ratio:4/3;object-fit:cover;width:100%" />
+      <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" style="border-radius:10px;aspect-ratio:4/3;object-fit:cover;width:100%" />
       <p class="mt-3 muted">${esc(p.species)} · ${esc(p.category)}</p>
       <h3 class="mt-2">${esc(p.name)}</h3>
       <p>${esc(p.desc)}</p>
@@ -213,7 +213,7 @@
     }
     body.innerHTML = items.map(i => `
       <div class="cart-item">
-        <img src="${esc(i.p.images[0])}" alt="${esc(i.p.name)}" />
+        <img src="${esc(i.p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(i.p.name)}" />
         <div class="cart-item-info">
           <h4>${esc(i.p.name)}</h4>
           <div class="price-row" style="margin:2px 0">
@@ -727,7 +727,7 @@
     $('#recommendations').innerHTML = recs.length ? recs.map(p => `
       <article class="card" data-product="${p.id}">
         <div class="card-media">
-          <img src="${esc(p.images[0])}" alt="${esc(p.name)}" loading="lazy" />
+          <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" loading="lazy" />
           ${p.stock <= 15 ? '<span class="tag-badge" style="background:var(--red-500);color:#fff">Últimas unidades</span>' : '<span class="tag-badge">Recomendado</span>'}
         </div>
         <div class="card-body">

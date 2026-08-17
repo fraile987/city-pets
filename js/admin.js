@@ -214,7 +214,7 @@
   function renderProductsTable() {
     $('#adminProducts').innerHTML = productsCache.map(p => `
       <tr>
-        <td><img src="${esc(p.images[0])}" style="width:52px;height:44px;object-fit:cover;border-radius:6px" /></td>
+        <td><img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" style="width:52px;height:44px;object-fit:cover;border-radius:6px" /></td>
         <td><strong>${esc(p.name)}</strong><br/><span class="muted" style="font-size:.78rem">${esc(p.category)} · ${esc(p.unit)}</span></td>
         <td>${esc(p.species)}</td>
         <td class="money">${fmtMoney(p.price)}</td>
@@ -241,7 +241,7 @@
     $('#apmRation').value = p.dailyRation;
     $('#apmDesc').value = p.desc;
     $('#apmTags').value = p.tags.join(';');
-    $('#apmImagePreview').innerHTML = `<img src="${p.images[0]}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" />`;
+    $('#apmImagePreview').innerHTML = `<img src="${p.images[0] || IMG_PLACEHOLDER}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" />`;
     $('#apmTitle').textContent = 'Editar: ' + p.name;
     openModal();
   }
@@ -276,7 +276,7 @@
             method: 'POST',
             body: {
               ...base,
-              images: images.length ? images : ['https://picsum.photos/seed/admin' + Math.floor(Math.random() * 90) + '/600/450'],
+              images: images.length ? images : [],
               video: video || ''
             }
           });
@@ -373,7 +373,7 @@
         desc: get('desc'),
         dailyRation: parseInt(get('dailyration')) || 0,
         tags: get('tags').split(';').map(t => t.trim().toLowerCase()).filter(Boolean),
-        images: ['https://picsum.photos/seed/csv' + Math.floor(Math.random() * 90) + '/600/450']
+        images: []
       });
     });
     for (const body of pending) {
