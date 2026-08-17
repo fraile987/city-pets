@@ -1,0 +1,58 @@
+# =========================================================
+# CITY PETS — systemd unit (Fase 9.6)
+#
+# Instalación:
+#   sudo cp deploy/city-pets.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now city-pets
+#
+# Configuración (ajustar a tu despliegue):
+#   - WorkingDirectory: ruta del backend (clonar el repo en /opt/city-pets
+#     deja el backend en /opt/city-pets/city-pets-backend).
+#   - EnvironmentFile: apunta al .env de producción (mismo directorio).
+#   - User/Group: usuario dedicado sin shell (p. ej. `citypets`). NUNCA root.
+#   - Rutas de datos (ReadWritePaths) deben coincidir con DATABASE_URL,
+#     UPLOADS_PATH y el BACKUP_DIR de deploy/deploy.sh.
+#   - ExecStart: usa la ruta real de node (ajusta con `which node`).
+#
+# Logs: salida a journald (journalctl -u city-pets -f), sin redirección.
+# =========================================================
+[Unit]
+Description=City Pets API (Node/Express)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+
+# Usuario dedicado, sin privilegios
+User=citypets
+Group=citypets
+
+# Directorio de trabajo y variables de entorno
+WorkingDirectory=/opt/city-pets/city-pets-backend
+EnvironmentFile=/opt/city-pets/city-pets-backend/.env
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/node server.js
+
+# Reinicio automático
+Restart=on-failure
+RestartSec=2
+
+# Sandbox: permisos mínimos (solo las rutas de datos quedan escribibles)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# BD, medios y backups viven fuera del código
+ReadWritePaths=/var/lib/city-pets/data /var/lib/city-pets/uploads /var/lib/city-pets/backups
+
+[Install]
+WantedBy=multi-user.target

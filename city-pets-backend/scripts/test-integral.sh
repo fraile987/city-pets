@@ -582,3 +582,67 @@ SERVER_PID=$!
 sleep 2
 check "producto restaurado" "$(req /products "$TANA" | body_of | json 'j.some(p=>p.name==="Restaurame")')" "true"
 [ -f uploads/products/g14.txt ] && ok "archivo uploads restaurado" || ko "archivo uploads no restaurado"
+
+echo ""
+echo "===== G15. Fase 9.6: artefactos de despliegue (VPS) ====="
+# --- artefactos presentes ---
+[ -f deploy/city-pets.service ] && ok "systemd unit presente" || ko "falta deploy/city-pets.service"
+[ -f deploy/nginx.conf ] && ok "nginx.conf presente" || ko "falta deploy/nginx.conf"
+[ -f deploy/deploy.sh ] && ok "deploy.sh presente" || ko "falta deploy/deploy.sh"
+[ -x deploy/deploy.sh ] && ok "deploy.sh ejecutable" || ko "deploy.sh no es ejecutable"
+[ -f ../.nvmrc ] && ok ".nvmrc presente" || ko "falta .nvmrc"
+# --- nginx.conf por contenido ---
+grep -q 'proxy_pass http://127.0.0.1:3000' deploy/nginx.conf && ok "nginx: proxy_pass 127.0.0.1:3000" || ko "nginx: sin proxy_pass"
+grep -q 'client_max_body_size 26m' deploy/nginx.conf && ok "nginx: client_max_body_size 26m" || ko "nginx: falta client_max_body_size"
+grep -q 'location /uploads/' deploy/nginx.conf && ok "nginx: /uploads proxied" || ko "nginx: sin location /uploads"
+grep -q 'X-Forwarded-For' deploy/nginx.conf && grep -q 'X-Forwarded-Proto' deploy/nginx.conf && ok "nginx: headers X-Forwarded-*" || ko "nginx: headers incompletos"
+grep -q 'listen 443 ssl' deploy/nginx.conf && grep -q 'ssl_certificate' deploy/nginx.conf && ok "nginx: preparado para HTTPS" || ko "nginx: sin preparacion HTTPS"
+# --- systemd por contenido ---
+grep -q '^User=citypets' deploy/city-pets.service && ok "systemd: usuario dedicado" || ko "systemd: sin usuario dedicado"
+if grep -q '^User=root' deploy/city-pets.service; then ko "systemd: NO debe usar root"; else ok "systemd: sin root"; fi
+grep -q '^Restart=on-failure' deploy/city-pets.service && ok "systemd: reinicio automatico" || ko "systemd: sin Restart"
+grep -q '^EnvironmentFile=' deploy/city-pets.service && ok "systemd: EnvironmentFile (.env)" || ko "systemd: sin EnvironmentFile"
+grep -q '^WorkingDirectory=' deploy/city-pets.service && ok "systemd: WorkingDirectory" || ko "systemd: sin WorkingDirectory"
+grep -q 'network-online.target' deploy/city-pets.service && ok "systemd: dependencia de red" || ko "systemd: sin network-online"
+grep -q 'NoNewPrivileges=true' deploy/city-pets.service && grep -q 'ProtectSystem=strict' deploy/city-pets.service && ok "systemd: sandbox minimo" || ko "systemd: sin sandbox"
+# --- Node / LTS ---
+NVM="$(cat ../.nvmrc 2>/dev/null)"
+case "$NVM" in 24.*) ok "nvmrc pin a LTS activa (Node $NVM)" ;; *) ko "nvmrc no apunta a LTS 24 ($NVM)" ;; esac
+node -e "const e=require('./package.json').engines; if(!e||!e.node||!e.node.includes('24'))process.exit(1)" && ok "engines.node cubre Node 24" || ko "engines.node no cubre Node 24"
+# --- deploy.sh pasos obligatorios ---
+grep -q 'npm ci' deploy/deploy.sh && ok "deploy: npm ci" || ko "deploy: sin npm ci"
+grep -q 'prisma migrate deploy' deploy/deploy.sh && ok "deploy: migrate deploy" || ko "deploy: sin migrate deploy"
+grep -q 'install -d' deploy/deploy.sh && ok "deploy: permisos de datos" || ko "deploy: sin permisos"
+grep -q 'systemctl restart' deploy/deploy.sh && ok "deploy: reinicia servicio" || ko "deploy: sin restart"
+grep -q 'HEALTH_URL' deploy/deploy.sh && ok "deploy: healthcheck posterior" || ko "deploy: sin healthcheck"
+# --- prod sobre 127.0.0.1:3000 + proxy temporal :8080 (sin nginx) ---
+kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
+NODE_ENV=production CORS_ORIGINS='https://citypets.com,https://www.citypets.com' PORT=3000 \
+  node server.js > /tmp/citypets-g15-prod.log 2>&1 &
+SERVER_PID=$!
+FAKE_CLIENT_IP=198.51.100.7 PORT=8080 TARGET=3000 node scripts/test-proxy.js > /tmp/citypets-g15-proxy.log 2>&1 &
+PROXY_PID=$!
+sleep 2
+# admin propio de G15 (reproducible; no depende de TANA)
+R=$(curl -s -w '|%{http_code}' -X POST "$B/auth/register" -H 'Content-Type: application/json' -d '{"name":"G15 Admin","phone":"3005550999","email":"g15proxy@test.co","password":"clave123"}')
+TG15=$(body_of "$R" | json 'j.token')
+npm run promote -- g15proxy@test.co >/dev/null 2>&1
+[ "${TG15:0:4}" = "eyJh" ] && ok "G15 crea su propio admin" || ko "G15 no pudo crear admin"
+# backend :3000 solo en loopback
+LISTEN=$(ss -ltn 2>/dev/null | grep ':3000' | head -1)
+case "$LISTEN" in *"127.0.0.1:3000"*) ok "prod :3000 solo en loopback" ;; *) ko "prod :3000 expuesto ($LISTEN)" ;; esac
+# salud a través del proxy
+check "proxy: /api/health 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/health)" "200"
+check "proxy: body status ok" "$(curl -s http://127.0.0.1:8080/api/health | json 'j.status')" "ok"
+# X-Forwarded-For -> req.ip correcto (solo confía en el proxy inmediato)
+check "proxy: req.ip desde XFF (cliente)" "$(curl -s http://127.0.0.1:8080/api/health | json 'j.ip')" "198.51.100.7"
+check "proxy: XFF forjado NO se acepta" "$(curl -s -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8080/api/health | json 'j.ip')" "198.51.100.7"
+# subida > 1 MB atraviesa el proxy (nginx con 1 MB default la cortaría)
+node scripts/gen-test-png.js /tmp/cp-g15-big.png >/dev/null
+[ "$(stat -c %s /tmp/cp-g15-big.png 2>/dev/null || echo 0)" -gt 1048576 ] && ok "PNG de prueba >1MB generado" || ko "PNG de prueba no supera 1MB"
+UP=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TG15" -F 'file=@/tmp/cp-g15-big.png' http://127.0.0.1:8080/api/upload/image)
+check "proxy: subida >1MB atraviesa el proxy (201)" "$(code_of "$UP")" "201"
+PIMG=$(body_of "$UP" | json 'j.url')
+check "proxy: /uploads servido (200)" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080$PIMG")" "200"
+kill "$PROXY_PID" 2>/dev/null; wait "$PROXY_PID" 2>/dev/null
+[ "$FAIL" -eq 0 ]
