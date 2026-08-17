@@ -25,11 +25,26 @@
       </div>
       <div class="nav-actions">
         <a class="btn btn-gold btn-sm" href="index.html">← Volver a la tienda</a>
+        <button class="btn btn-outline btn-sm hidden" id="btnAdminLogout" type="button">Cerrar sesión</button>
       </div>
     </div>
   </nav>
 
-  <main class="container" style="padding:32px 0">
+  <!-- ============ GATE DE LOGIN ADMIN ============ -->
+  <div id="adminGate" class="container" style="padding:64px 0;max-width:520px">
+    <div class="panel">
+      <div class="panel-header">
+        <h3>🔐 Acceso administrador</h3>
+        <span class="badge badge-gold">Solo personal</span>
+      </div>
+      <p class="muted mb-3">Inicia sesión con una cuenta con rol administrador para gestionar el panel.</p>
+      <div class="field"><label for="admEmail">Correo electrónico</label><input id="admEmail" type="email" placeholder="admin@citypets.co" /></div>
+      <div class="field"><label for="admPassword">Contraseña</label><input id="admPassword" type="password" placeholder="Tu contraseña" /></div>
+      <button class="btn btn-navy btn-block" id="btnAdminLogin">Entrar al panel</button>
+    </div>
+  </div>
+
+  <main class="container hidden" id="adminApp" style="padding:32px 0">
 
     <!-- ============ DASHBOARD / KPIs ============ -->
     <section data-aview="dashboard">

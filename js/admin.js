@@ -1,19 +1,28 @@
 /* =========================================================
    CITY PETS — Lógica del panel de administración
+   Conectado a la API (Prisma). Requiere rol admin.
+   La sesión usa el mismo JWT del storefront (cp_session).
    ========================================================= */
 (() => {
   'use strict';
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  document.addEventListener('DOMContentLoaded', () => {
-    seedProducts();
+  let productsCache = [];
+  let ordersCache = [];
+  let attributionCache = null;
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  function init() {
+    bindLogin();
+    bindLogout();
     bindTabs();
     bindProducts();
     bindOrders();
     bindIncidents();
-    renderAll();
-  });
+    initSession();
+  }
 
   function toast(msg, type = '') {
     const t = document.createElement('div');
@@ -21,6 +30,81 @@
     t.textContent = msg;
     $('#toastWrap').appendChild(t);
     setTimeout(() => t.remove(), 3200);
+  }
+
+  /* ---------- Sesión / login admin ---------- */
+  async function initSession() {
+    if (!getToken()) { showGate(); return; }
+    try {
+      const data = await api('/auth/me');
+      if (data.user.role !== 'admin') {
+        toast('Acceso restringido: se requiere rol administrador', 'error');
+        showGate();
+        return;
+      }
+      showApp();
+      await refreshAll();
+    } catch {
+      setToken(null);
+      showGate();
+    }
+  }
+
+  function bindLogin() {
+    $('#btnAdminLogin').addEventListener('click', async () => {
+      const email = $('#admEmail').value.trim();
+      const password = $('#admPassword').value;
+      if (!email || !password) { toast('Indica correo y contraseña', 'error'); return; }
+      try {
+        const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+        if (data.user.role !== 'admin') {
+          toast('Acceso restringido: se requiere rol administrador', 'error');
+          return;
+        }
+        setToken(data.token);
+        $('#admEmail').value = $('#admPassword').value = '';
+        showApp();
+        await refreshAll();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
+  }
+
+  function bindLogout() {
+    $('#btnAdminLogout').addEventListener('click', () => {
+      setToken(null);
+      showGate();
+      toast('Sesión cerrada');
+    });
+  }
+
+  function showGate() {
+    $('#adminGate').classList.remove('hidden');
+    $('#adminApp').classList.add('hidden');
+    $('#btnAdminLogout').classList.add('hidden');
+  }
+
+  function showApp() {
+    $('#adminGate').classList.add('hidden');
+    $('#adminApp').classList.remove('hidden');
+    $('#btnAdminLogout').classList.remove('hidden');
+  }
+
+  async function refreshAll() {
+    try {
+      const [products, orders, attribution] = await Promise.all([
+        api('/products', { auth: false }),
+        api('/admin/orders'),
+        api('/admin/attribution')
+      ]);
+      productsCache = products;
+      ordersCache = orders;
+      attributionCache = attribution;
+      renderAll();
+    } catch (e) {
+      toast(e.message || 'No se pudieron cargar los datos', 'error');
+    }
   }
 
   function renderAll() {
@@ -46,24 +130,24 @@
 
   /* ---------- KPIs ---------- */
   function renderKPIs() {
-    const orders = App.orders;
+    const orders = ordersCache;
     const pending = orders.filter(o => o.status === 'pendiente');
     const incidents = orders.filter(o => o.status === 'incidente');
     const totalVal = orders.reduce((s, o) => s + o.total, 0);
-    const stock = App.products.reduce((s, p) => s + p.stock, 0);
+    const stock = productsCache.reduce((s, p) => s + p.stock, 0);
 
     $('#kpiOrders').textContent = orders.length;
     $('#kpiOrdersVal').textContent = fmtMoney(totalVal) + ' en ventas';
     $('#kpiPending').textContent = pending.length;
     $('#kpiPendingVal').textContent = pending.length ? 'Próxima entrega: ' + pending[0].deliveryLabel : 'Todo entregado';
     $('#kpiStock').textContent = stock.toLocaleString('es-CO');
-    $('#kpiStockProd').textContent = App.products.length + ' referencias';
+    $('#kpiStockProd').textContent = productsCache.length + ' referencias';
     $('#kpiIncidents').textContent = incidents.length;
     const incidentUsers = new Set(incidents.map(i => i.userName));
     $('#kpiIncidentsUsers').textContent = incidentUsers.size + ' usuarios no cumplieron';
 
     /* Barras de atribución (dashboard) */
-    const attr = aggregateAttribution();
+    const attr = attributionCache ? attributionCache.channels : [];
     const max = Math.max(1, ...attr.map(a => a.count));
     $('#attributionBars').innerHTML = attr.length ? attr.map(a => `
       <div class="mb-3">
@@ -75,8 +159,8 @@
         </div>
       </div>`).join('') : '<p class="muted">Sin registros de usuarios aún.</p>';
 
-    /* Últimos pedidos */
-    $('#recentOrders').innerHTML = orders.length ? orders.slice(-4).reverse().map(o => `
+    /* Últimos pedidos (la API ya los entrega ordenados desc) */
+    $('#recentOrders').innerHTML = orders.length ? orders.slice(0, 4).map(o => `
       <div class="row" style="justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px dashed var(--gray-100)">
         <div>
           <strong style="font-size:.88rem">${o.id}</strong>
@@ -84,12 +168,6 @@
         </div>
         <span class="badge ${o.status === 'entregado' ? 'badge-green' : o.status === 'incidente' ? 'badge-red' : 'badge-gold'}">${o.status === 'entregado' ? 'Entregado' : o.status === 'incidente' ? 'Incidente' : 'Pendiente'}</span>
       </div>`).join('') : '<p class="muted">Sin pedidos aún.</p>';
-  }
-
-  function aggregateAttribution() {
-    const map = {};
-    App.attributions.forEach(a => { map[a.channel] = (map[a.channel] || 0) + 1; });
-    return Object.entries(map).map(([channel, count]) => ({ channel, count })).sort((a, b) => b.count - a.count);
   }
 
   /* ---------- Productos CMS ---------- */
@@ -131,16 +209,12 @@
       const edit = e.target.closest('[data-edit]');
       const del = e.target.closest('[data-del]');
       if (edit) editProduct(edit.dataset.edit);
-      if (del) {
-        App.products = App.products.filter(p => p.id !== del.dataset.del);
-        toast('Producto eliminado');
-        renderAll();
-      }
+      if (del) deleteProduct(del.dataset.del);
     });
   }
 
   function renderProductsTable() {
-    $('#adminProducts').innerHTML = App.products.map(p => `
+    $('#adminProducts').innerHTML = productsCache.map(p => `
       <tr>
         <td><img src="${p.images[0]}" style="width:52px;height:44px;object-fit:cover;border-radius:6px" /></td>
         <td><strong>${p.name}</strong><br/><span class="muted" style="font-size:.78rem">${p.category} · ${p.unit}</span></td>
@@ -156,7 +230,7 @@
   }
 
   function editProduct(id) {
-    const p = App.products.find(x => x.id === id);
+    const p = productsCache.find(x => x.id === id);
     if (!p) return;
     $('#apmId').value = p.id;
     $('#apmName').value = p.name;
@@ -174,7 +248,7 @@
     openModal();
   }
 
-  function saveProduct() {
+  async function saveProduct() {
     const id = $('#apmId').value;
     const name = $('#apmName').value.trim();
     const price = parseFloat($('#apmPrice').value);
@@ -184,29 +258,37 @@
     const imageFile = $('#apmImage').files[0];
     const videoFile = $('#apmVideo').files[0];
 
-    const commit = (images, video) => {
+    const commit = async (images, video) => {
       const base = {
         name, species: $('#apmSpecies').value, category: $('#apmCategory').value.trim() || 'General',
         price, unit: $('#apmUnit').value.trim() || '1 und', grams: parseInt($('#apmGrams').value) || 0,
         stock, desc: $('#apmDesc').value.trim(),
         dailyRation: parseInt($('#apmRation').value) || 0,
-        tags: $('#apmTags').value.split(';').map(t => t.trim().toLowerCase()).filter(Boolean),
-        rating: 4.0
+        tags: $('#apmTags').value.split(';').map(t => t.trim().toLowerCase()).filter(Boolean)
       };
-      if (id) {
-        const old = App.products.find(p => p.id === id);
-        App.products = App.products.map(p => p.id === id ? {
-          ...old, ...base,
-          images: images.length ? images : old.images,
-          video: video !== undefined ? video : old.video
-        } : p);
-        toast('Producto actualizado', 'success');
-      } else {
-        App.products = [{ id: uid('P'), ...base, images: images.length ? images : ['https://picsum.photos/seed/product' + Math.floor(Math.random() * 90) + '/600/450'], video: video || '' }, ...App.products];
-        toast('Producto creado', 'success');
+      try {
+        if (id) {
+          await api('/products/' + id, {
+            method: 'PUT',
+            body: { ...base, images: images.length ? images : undefined, video: video || undefined }
+          });
+          toast('Producto actualizado', 'success');
+        } else {
+          await api('/products', {
+            method: 'POST',
+            body: {
+              ...base,
+              images: images.length ? images : ['https://picsum.photos/seed/admin' + Math.floor(Math.random() * 90) + '/600/450'],
+              video: video || ''
+            }
+          });
+          toast('Producto creado', 'success');
+        }
+        closeModal();
+        await refreshAll();
+      } catch (e) {
+        toast(e.message, 'error');
       }
-      closeModal();
-      renderAll();
     };
 
     const images = [];
@@ -227,9 +309,19 @@
     });
   }
 
+  async function deleteProduct(id) {
+    try {
+      await api('/products/' + id, { method: 'DELETE' });
+      toast('Producto eliminado');
+      await refreshAll();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
   function downloadTemplate() {
     const header = 'name,species,category,price,unit,grams,stock,desc,dailyRation,tags';
-    const rows = App.products.map(p => `${csv(p.name)},${csv(p.species)},${csv(p.category)},${p.price},${csv(p.unit)},${p.grams},${p.stock},${csv(p.desc)},${p.dailyRation},${csv(p.tags.join(';'))}`);
+    const rows = productsCache.map(p => `${csv(p.name)},${csv(p.species)},${csv(p.category)},${p.price},${csv(p.unit)},${p.grams},${p.stock},${csv(p.desc)},${p.dailyRation},${csv(p.tags.join(';'))}`);
     const blob = new Blob(['\uFEFF' + [header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -266,18 +358,18 @@
     return rows;
   }
 
-  function importCSV(text) {
+  async function importCSV(text) {
     const rows = parseCSV(text);
     if (rows.length < 2) { toast('CSV vacío', 'error'); return; }
     const hdr = rows[0].map(h => h.trim().toLowerCase());
     const idx = (k) => hdr.indexOf(k);
     let added = 0;
+    const pending = [];
     rows.slice(1).forEach(r => {
       const get = (k) => { const i = idx(k); return i >= 0 ? (r[i] || '').trim() : ''; };
       const name = get('name');
       if (!name) return;
-      App.products.push({
-        id: uid('P'),
+      pending.push({
         name,
         species: get('species') || 'General',
         category: get('category') || 'General',
@@ -288,30 +380,36 @@
         desc: get('desc'),
         dailyRation: parseInt(get('dailyration')) || 0,
         tags: get('tags').split(';').map(t => t.trim().toLowerCase()).filter(Boolean),
-        images: ['https://picsum.photos/seed/csv' + Math.floor(Math.random() * 90) + '/600/450'],
-        video: '', rating: 4.0
+        images: ['https://picsum.photos/seed/csv' + Math.floor(Math.random() * 90) + '/600/450']
       });
-      added++;
     });
+    for (const body of pending) {
+      try { await api('/products', { method: 'POST', body }); added++; } catch { /* fila inválida: se omite */ }
+    }
     toast(`✅ ${added} producto(s) cargado(s)`, 'success');
-    renderAll();
+    await refreshAll();
   }
 
   /* ---------- Pedidos ---------- */
   function bindOrders() {
-    $('#adminOrders').addEventListener('click', (e) => {
+    $('#adminOrders').addEventListener('click', async (e) => {
       const del = e.target.closest('[data-odeliver]');
       const inc = e.target.closest('[data-oincident]');
       if (!del && !inc) return;
       const id = (del || inc).dataset[inc ? 'oincident' : 'odeliver'];
-      App.orders = App.orders.map(o => o.id === id ? { ...o, status: del ? 'entregado' : 'incidente' } : o);
-      toast(del ? 'Pedido marcado como entregado' : 'Incidencia registrada', 'success');
-      renderAll();
+      const status = del ? 'entregado' : 'incidente';
+      try {
+        await api('/admin/orders/' + id + '/status', { method: 'PATCH', body: { status } });
+        toast(del ? 'Pedido marcado como entregado' : 'Incidencia registrada', 'success');
+        await refreshAll();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
     });
   }
 
   function renderOrdersTable() {
-    const orders = [...App.orders].reverse();
+    const orders = ordersCache;
     $('#adminOrders').innerHTML = orders.map(o => `
       <tr>
         <td><strong>${o.id}</strong><br/><span class="muted" style="font-size:.75rem">${new Date(o.createdAt).toLocaleString('es-CO')}</span></td>
@@ -329,17 +427,21 @@
 
   /* ---------- Incidencias ---------- */
   function bindIncidents() {
-    $('#adminIncidents').addEventListener('click', (e) => {
+    $('#adminIncidents').addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-iresolve]');
       if (!btn) return;
-      App.orders = App.orders.map(o => o.id === btn.dataset.iresolve ? { ...o, status: 'entregado' } : o);
-      toast('Incidencia resuelta');
-      renderAll();
+      try {
+        await api('/admin/orders/' + btn.dataset.iresolve + '/status', { method: 'PATCH', body: { status: 'entregado' } });
+        toast('Incidencia resuelta');
+        await refreshAll();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
     });
   }
 
   function renderIncidents() {
-    const incidents = App.orders.filter(o => o.status === 'incidente');
+    const incidents = ordersCache.filter(o => o.status === 'incidente');
     $('#adminIncidents').innerHTML = incidents.map(o => `
       <tr>
         <td><strong>${o.id}</strong></td>
@@ -353,7 +455,7 @@
 
   /* ---------- Atribución ---------- */
   function renderAttribution() {
-    const attr = aggregateAttribution();
+    const attr = attributionCache ? attributionCache.channels : [];
     const total = attr.reduce((s, a) => s + a.count, 0);
     $('#attributionTable').innerHTML = attr.length ? `
       <table>
@@ -367,15 +469,12 @@
         </tbody>
       </table>` : '<p class="muted">Sin usuarios registrados.</p>';
 
-    const det = [...App.attributions].reverse().slice(0, 12);
-    $('#attributionDetail').innerHTML = det.length ? det.map(a => {
-      const u = App.users.find(x => x.id === a.userId);
-      return `
+    const det = attributionCache ? attributionCache.detail.slice(0, 12) : [];
+    $('#attributionDetail').innerHTML = det.length ? det.map(a => `
       <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--gray-100);font-size:.88rem">
-        <span>${u ? u.name : '—'}</span>
+        <span>${a.userName}</span>
         <span class="badge badge-gold">${a.channel}</span>
-      </div>`;
-    }).join('') : '<p class="muted">Sin registros de atribución.</p>';
+      </div>`).join('') : '<p class="muted">Sin registros de atribución.</p>';
   }
 
   /* ---------- Modal ---------- */
