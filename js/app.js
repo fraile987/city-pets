@@ -651,6 +651,11 @@
       $('#calcGrams').value = o.dataset.grams;
       $('#calcRation').value = o.dataset.ration;
     });
+    $('#compProduct').addEventListener('change', (e) => {
+      const o = e.target.selectedOptions[0];
+      if (!o) return;
+      $('#compGrams').value = o.dataset.grams;
+    });
   }
 
   function bindTools() {
@@ -673,32 +678,52 @@
 
     $('#btnCompare').addEventListener('click', () => {
       const opt = $('#compProduct').selectedOptions[0];
+      const p = opt ? App.products.find(x => x.id === opt.value) : null;
       const compPrice = parseFloat($('#compPrice').value);
       const compGrams = parseFloat($('#compGrams').value);
-      if (!opt || !compPrice || !compGrams || compGrams <= 0) { toast('Completa precio y gramaje del competidor', 'error'); return; }
-      const cpPrice = parseFloat(opt.dataset.price);
-      const cpGrams = parseFloat(opt.dataset.grams);
+      if (!p || isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0) {
+        toast('Completa precio y gramaje del competidor (positivos)', 'error');
+        return;
+      }
+      const cpPrice = p.price;
+      const cpGrams = p.grams;
       const cpPerKg = cpPrice / cpGrams * 1000;
       const compPerKg = compPrice / compGrams * 1000;
       const diff = cpPerKg - compPerKg;
       const pct = (Math.abs(diff) / compPerKg * 100).toFixed(1);
+      const equal = Math.abs(diff) < 0.005;
       const cheaper = diff < 0;
+      const diffColor = equal ? 'var(--navy-800)' : cheaper ? 'var(--green-600)' : 'var(--red-500)';
+      const diffLabel = equal
+        ? 'Sin diferencia'
+        : `${fmtMoney(Math.round(Math.abs(diff)))}/kg ${cheaper ? 'a favor de City Pets' : 'a favor del competidor'}`;
       $('#compResult').innerHTML = `
         <div class="panel" style="background:var(--cloud)">
+          <div class="muted" style="font-size:.85rem;margin-bottom:.5rem">${esc(p.name)} · ${esc(p.unit)}</div>
           <div class="row" style="justify-content:space-between">
             <div class="ta-center grow">
               <div class="muted" style="font-size:.75rem">CITY PETS</div>
-              <div style="font-size:1.4rem;font-weight:800;color:var(--navy-800)" class="money">${fmtMoney(cpPerKg)}</div>
-              <div class="muted" style="font-size:.72rem">por kg (${fmtMoney(cpPrice)} / ${cpGrams} g)</div>
+              <div style="font-size:1.4rem;font-weight:800;color:var(--navy-800)" class="money">${fmtMoney(cpPrice)}</div>
+              <div class="muted" style="font-size:.72rem">${fmtMoney(Math.round(cpPerKg))}/kg · ${cpGrams} g</div>
             </div>
             <div class="ta-center grow">
               <div class="muted" style="font-size:.75rem">COMPETIDOR</div>
-              <div style="font-size:1.4rem;font-weight:800;color:var(--gray-700)" class="money">${fmtMoney(compPerKg)}</div>
-              <div class="muted" style="font-size:.72rem">por kg (${fmtMoney(compPrice)} / ${compGrams} g)</div>
+              <div style="font-size:1.4rem;font-weight:800;color:var(--gray-700)" class="money">${fmtMoney(compPrice)}</div>
+              <div class="muted" style="font-size:.72rem">${fmtMoney(Math.round(compPerKg))}/kg · ${compGrams} g</div>
             </div>
           </div>
-          <div class="ta-center mt-3" style="font-weight:800;color:${cheaper ? 'var(--green-600)' : 'var(--red-500)'}">
-            ${cheaper ? `✅ City Pets es ${pct}% más económico por kg` : `⚠️ City Pets cuesta ${pct}% más por kg`}
+          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
+            <div class="summary-line">
+              <span>Diferencia por kg</span>
+              <span style="font-weight:800;color:${diffColor}">${diffLabel}</span>
+            </div>
+            <div class="ta-center mt-2" style="font-weight:800;color:${diffColor}">
+              ${equal
+                ? '⚖️ Mismo precio por kg'
+                : cheaper
+                  ? `✅ Ahorro: City Pets es ${pct}% más económico por kg`
+                  : `⚠️ City Pets cuesta ${pct}% más por kg`}
+            </div>
           </div>
         </div>`;
     });
