@@ -933,8 +933,7 @@ AFTER_U=$(ls uploads/products 2>/dev/null | md5sum | cut -d' ' -f1)
 AFTER_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
 [ "$AFTER_U" = "$BEFORE_U" ] && ok "10.3: uploads/ del repo intacto" || ko "10.3: se escribio en uploads/ del repo"
 [ "$AFTER_D" = "$BEFORE_D" ] && ok "10.3: BD del repo intacta" || ko "10.3: se escribio en la BD del repo"
-kill "$SUP_PID" 2>/dev/null; wait "$SUP_PID" 2>/dev/null
-rm -rf "$SBOX"
+# (el sandbox G18 y su supervisor quedan vivos para el E2E final de G20)
 
 echo ""
 echo "===== G19. Fase 10.5: backups automaticos ====="
@@ -1018,5 +1017,82 @@ else
   DB_PATH="$SBOX_DATA/dev.db" UPLOADS_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" bash scripts/backup.sh >/dev/null 2>&1
   [ -n "$(ls -1 "$SBOX_BKP"/citypets-*.tar.gz 2>/dev/null)" ] && ok "10.5: backup ejecutado (simulacion, sin systemd de usuario)" || ko "10.5: backup fallo en simulacion"
 fi
+rm -rf "$SBOX"
+
+echo ""
+echo "===== G20. Fase 10.6: E2E final en produccion (proxy -> Express) ====="
+# continua sobre el sandbox de G18 (server prod + supervisor vivos)
+SBOX=/tmp/citypets-g18-vps
+SBOX_BE="$SBOX/opt/city-pets/city-pets-backend"
+SBOX_DATA="$SBOX/var/lib/city-pets/data"
+SBOX_MEDIA="$SBOX/var/lib/city-pets/uploads"
+SBOX_BKP="$SBOX/var/lib/city-pets/backups"
+SBOX_PORT=3102
+PX=8080
+BEFORE_U=$(ls uploads/products 2>/dev/null | md5sum | cut -d' ' -f1)
+BEFORE_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
+PORT="$PX" TARGET="$SBOX_PORT" node scripts/test-proxy.js > /tmp/citypets-g20-proxy.log 2>&1 &
+PX_PID=$!
+sleep 1
+check "10.6: E2E: proxy -> Express: health 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PX/api/health)" "200"
+check "10.6: E2E: catalogo accesible" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PX/api/products)" "200"
+# registro comprador
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$PX/api/auth/register" -H 'Content-Type: application/json' -d '{"name":"Compra G20","phone":"3005550666","email":"g20buyer@test.co","password":"clave123"}')
+TB20=$(body_of "$R" | json 'j.token')
+check "10.6: E2E: registro comprador 201" "$(code_of "$R")" "201"
+# login
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$PX/api/auth/login" -H 'Content-Type: application/json' -d '{"email":"g20buyer@test.co","password":"clave123"}')
+LB20=$(body_of "$R" | json 'j.token')
+check "10.6: E2E: login 200" "$(code_of "$R")" "200"
+[ "${LB20:0:4}" = "eyJh" ] && ok "10.6: E2E: sesion (token) valida" || ko "10.6: E2E: token de login invalido"
+# admin + producto con imagen y video
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$PX/api/auth/register" -H 'Content-Type: application/json' -d '{"name":"Admin G20","phone":"3005550555","email":"g20admin@test.co","password":"clave123"}')
+TA20=$(body_of "$R" | json 'j.token')
+(cd "$SBOX_BE" && npm run promote -- g20admin@test.co >/dev/null 2>&1)
+[ "${TA20:0:4}" = "eyJh" ] && ok "10.6: E2E: admin registrado y promovido" || ko "10.6: E2E: admin fallo"
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$PX/api/products" -H "Authorization: Bearer $TA20" -H 'Content-Type: application/json' -d '{"name":"Prod G20","species":"Perros","price":12000,"stock":50}')
+PID20=$(body_of "$R" | json 'j.id')
+check "10.6: E2E: producto creado 201" "$(code_of "$R")" "201"
+node scripts/gen-test-png.js /tmp/cp-g20-img.png >/dev/null
+UP=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TA20" -F 'file=@/tmp/cp-g20-img.png' "http://127.0.0.1:$PX/api/upload/image")
+check "10.6: E2E: imagen subida 201" "$(code_of "$UP")" "201"
+printf '\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41' > /tmp/cp-g20-vid.mp4
+VP=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TA20" -F 'file=@/tmp/cp-g20-vid.mp4' "http://127.0.0.1:$PX/api/upload/video")
+check "10.6: E2E: video subido 201" "$(code_of "$VP")" "201"
+# browse: producto visible sin auth
+check "10.6: E2E: catalogo incluye Prod G20" "$(curl -s http://127.0.0.1:$PX/api/products | json 'j.some(p=>p.id===v)' "$PID20")" "true"
+# carrito -> checkout -> pedido
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$PX/api/orders" -H "Authorization: Bearer $TB20" -H 'Content-Type: application/json' -d "{\"items\":[{\"productId\":\"$PID20\",\"qty\":2}],\"address\":\"Carrera 7 # 1-2\",\"payment\":{\"method\":\"digital\"}}")
+OID=$(body_of "$R" | json 'j.id')
+check "10.6: E2E: checkout 201" "$(code_of "$R")" "201"
+[ -n "$OID" ] && ok "10.6: E2E: pedido con id" || ko "10.6: E2E: pedido sin id"
+# historial propio + admin + auth requerida
+check "10.6: E2E: historial comprador incluye pedido" "$(curl -s http://127.0.0.1:$PX/api/orders -H "Authorization: Bearer $TB20" | json 'j.some(o=>o.id===v)' "$OID")" "true"
+check "10.6: E2E: admin ve el pedido" "$(curl -s http://127.0.0.1:$PX/api/admin/orders -H "Authorization: Bearer $TA20" | json 'j.some(o=>o.id===v)' "$OID")" "true"
+check "10.6: E2E: historial sin auth 401" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PX/api/orders)" "401"
+# ciclo de vida del pedido
+check "10.6: E2E: admin marca entregado" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "http://127.0.0.1:$PX/api/admin/orders/$OID/status" -H "Authorization: Bearer $TA20" -H 'Content-Type: application/json' -d '{"status":"entregado"}')" "200"
+check "10.6: E2E: comprador ve entregado" "$(curl -s http://127.0.0.1:$PX/api/orders -H "Authorization: Bearer $TB20" | json 'j.find(o=>o.id===v).status' "$OID")" "entregado"
+# seguridad en runtime (via proxy)
+check "10.6: E2E: HSTS presente" "$(curl -s -D - -o /dev/null http://127.0.0.1:$PX/api/health | grep -ci 'strict-transport-security')" "1"
+check "10.6: E2E: XFF forjado ignorado (el proxy impone la IP real)" "$(curl -s -H 'X-Forwarded-For: 198.51.100.7' http://127.0.0.1:$PX/api/health | json 'j.ip')" "127.0.0.1"
+check "10.6: E2E: .env no expuesto" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PX/city-pets-backend/.env)" "404"
+# recuperacion (Restart=on-failure): el pedido sobrevive
+CPID=$(pgrep -P "$SUP_PID" || true)
+kill -9 "$CPID" 2>/dev/null || true
+sleep 4
+check "10.6: E2E: tras crash, health 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PX/api/health)" "200"
+check "10.6: E2E: pedido conservado tras crash" "$(curl -s http://127.0.0.1:$PX/api/orders -H "Authorization: Bearer $TB20" | json 'j.some(o=>o.id===v)' "$OID")" "true"
+# backup al final del viaje
+DB_PATH="$SBOX_DATA/dev.db" UPLOADS_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" bash "$SBOX_BE/scripts/backup.sh" > /tmp/citypets-g20-backup.log 2>&1
+BKP20=$(ls -1t "$SBOX_BKP"/citypets-*.tar.gz 2>/dev/null | head -1)
+[ -n "$BKP20" ] && ok "10.6: E2E: backup final creado" || ko "10.6: E2E: backup final ausente"
+# el repo no se toca
+AFTER_U=$(ls uploads/products 2>/dev/null | md5sum | cut -d' ' -f1)
+AFTER_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
+[ "$AFTER_U" = "$BEFORE_U" ] && ok "10.6: E2E: uploads/ del repo intacto" || ko "10.6: E2E: se escribio en uploads/ del repo"
+[ "$AFTER_D" = "$BEFORE_D" ] && ok "10.6: E2E: BD del repo intacta" || ko "10.6: E2E: se escribio en la BD del repo"
+kill "$PX_PID" 2>/dev/null; wait "$PX_PID" 2>/dev/null
+kill "$SUP_PID" 2>/dev/null; wait "$SUP_PID" 2>/dev/null
 rm -rf "$SBOX"
 [ "$FAIL" -eq 0 ]
