@@ -3,3 +3,6 @@ node_modules
 .env
 
 /generated/prisma
+
+# Medios subidos por el admin (Fase 9.5B)
+uploads/

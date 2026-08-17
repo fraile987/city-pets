@@ -453,3 +453,48 @@ kill "$PROD_PID" 2>/dev/null; wait "$PROD_PID" 2>/dev/null
 check "dev: localhost con ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: http://localhost:5500' "$B/health" | grep -ci 'access-control-allow-origin')" "1"
 check "dev: sin HSTS" "$(curl -s -D - -o /dev/null "$B/health" | grep -ci 'strict-transport-security')" "0"
 check "dev: log muestra [development]" "$(grep -c '\[development\]' /tmp/citypets-integral-server.log)" "1"
+
+echo ""
+echo "===== G13. Fase 9.5B: almacenamiento de medios (/uploads) ====="
+# --- config estática ---
+if grep -q '"multer"' package.json; then ok "multer instalado"; else ko "multer ausente"; fi
+if [ -f src/storage/index.js ]; then ok "adaptador de almacenamiento presente"; else ko "adaptador ausente"; fi
+if ! grep -q 'slice(0, 1000)' src/controllers/products.js; then ok "video ya no se trunca a 1000"; else ko "bug de truncado sigue"; fi
+if grep -q "app.use('/uploads'" server.js; then ok "/uploads servido estaticamente"; else ko "/uploads no servido"; fi
+if grep -q 'uploads/' .gitignore; then ok ".gitignore ignora uploads/"; else ko ".gitignore sin uploads"; fi
+if grep -q 'sanitizeVideo\|isMediaUrl' src/controllers/products.js; then ok "productos validan URLs de medios"; else ko "sin validacion de medios"; fi
+if [ -f scripts/migrate-media.js ]; then ok "script de migracion de data: presente"; else ko "migracion ausente"; fi
+# --- archivos de prueba ---
+printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' | base64 -d > /tmp/cp-upload.png
+printf 'not an image' > /tmp/cp-upload.txt
+printf '\x00\x00\x00\x20ftypisom\x00\x00\x00\x00isomiso2avc1mp41' > /tmp/cp-upload.mp4
+head -c 6291456 /dev/zero > /tmp/cp-big.png
+head -c 26214401 /dev/zero > /tmp/cp-big.mp4
+# --- autorización ---
+check "upload sin token 401" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -F 'file=@/tmp/cp-upload.png' "$B/upload/image")" "401"
+check "upload usuario normal 403" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TBOB" -F 'file=@/tmp/cp-upload.png' "$B/upload/image")" "403"
+# --- subida de imagen ---
+UPL=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-upload.png' "$B/upload/image")
+check "upload imagen admin 201" "$(code_of "$UPL")" "201"
+IMGURL=$(body_of "$UPL" | json 'j.url')
+check "url relativa /uploads" "${IMGURL:0:9}" "/uploads/"
+check "archivo servido 200" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT$IMGURL")" "200"
+check "content-type image/png" "$(hdr "$ROOT$IMGURL" '^content-type:')" "image/png"
+check "upload texto rechazado 400" "$(code_of "$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-upload.txt' "$B/upload/image")")" "400"
+check "upload imagen >5MB 413" "$(code_of "$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-big.png' "$B/upload/image")")" "413"
+# --- subida de video ---
+VUPL=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-upload.mp4' "$B/upload/video")
+check "upload video mp4 201" "$(code_of "$VUPL")" "201"
+VIDURL=$(body_of "$VUPL" | json 'j.url')
+check "video como url no base64" "${VIDURL:0:9}" "/uploads/"
+check "video servido 200" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT$VIDURL")" "200"
+check "upload texto como video 400" "$(code_of "$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-upload.txt' "$B/upload/video")")" "400"
+check "upload video >25MB 413" "$(code_of "$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-big.mp4' "$B/upload/video")")" "413"
+# --- integración con productos ---
+R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"name\":\"Producto Medio\",\"species\":\"Perros\",\"category\":\"Accesorios\",\"price\":12000,\"unit\":\"1 und\",\"grams\":0,\"stock\":6,\"images\":[\"$IMGURL\"],\"video\":\"$VIDURL\"}")
+check "crear producto con urls 201" "$(code_of "$R")" "201"
+check "images[0] es la url subida" "$(body_of "$R" | json 'j.images[0]')" "$IMGURL"
+check "video guardado sin truncar" "$(body_of "$R" | json 'j.video')" "$VIDURL"
+R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"Sin Base64","species":"Gatos","price":1,"images":["data:image/png;base64,AAAA"],"video":"data:video/mp4;base64,AAAA"}')
+check "base64 en images se descarta" "$(body_of "$R" | json 'JSON.stringify(j.images)')" "[]"
+check "base64 en video se descarta" "$(body_of "$R" | json 'JSON.stringify(j.video)')" '""'

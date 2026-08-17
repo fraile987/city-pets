@@ -200,9 +200,7 @@
     $('#apmImage').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const r = new FileReader();
-      r.onload = () => { $('#apmImagePreview').innerHTML = `<img src="${r.result}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" />`; };
-      r.readAsDataURL(file);
+      $('#apmImagePreview').innerHTML = `<img src="${URL.createObjectURL(file)}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" />`;
     });
 
     $('#adminProducts').addEventListener('click', (e) => {
@@ -291,22 +289,17 @@
       }
     };
 
-    const images = [];
-    const loadImage = imageFile ? new Promise(res => {
-      const r = new FileReader();
-      r.onload = () => { images.push(r.result); res(); };
-      r.readAsDataURL(imageFile);
-    }) : Promise.resolve();
-
-    loadImage.then(() => {
-      if (videoFile) {
-        const r = new FileReader();
-        r.onload = () => commit(images, r.result);
-        r.readAsDataURL(videoFile);
-      } else {
-        commit(images, '');
+    /* Fase 9.5B: los archivos se suben como multipart y el servidor devuelve
+       la ruta /uploads/... Nunca se envía Base64 en el JSON. */
+    (async () => {
+      try {
+        const images = imageFile ? [ (await uploadFile('/upload/image', imageFile)).url ] : [];
+        const video = videoFile ? (await uploadFile('/upload/video', videoFile)).url : '';
+        await commit(images, video);
+      } catch (e) {
+        toast(e.message, 'error');
       }
-    });
+    })();
   }
 
   async function deleteProduct(id) {

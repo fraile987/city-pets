@@ -46,6 +46,21 @@ async function api(path, { method = 'GET', body, auth = true } = {}) {
   return data;
 }
 
+/* Subida de medios en multipart (Fase 9.5B): devuelve { url } con la ruta
+   /uploads/... generada por el servidor. Nunca se envía Base64. */
+async function uploadFile(path, file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: getToken() ? { Authorization: 'Bearer ' + getToken() } : {},
+    body: fd
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Error al subir el archivo');
+  return data;
+}
+
 /* Franjas horarias */
 const SLOTS = [
   { id: 'manana', name: 'Mañana', hours: '06:00 – 13:00', dayOffset: 0 },

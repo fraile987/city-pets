@@ -106,6 +106,7 @@ app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/pets', require('./src/routes/pets'));
 app.use('/api/orders', require('./src/routes/orders'));
 app.use('/api/admin', require('./src/routes/admin'));
+app.use('/api/upload', require('./src/routes/upload'));
 
 /* ---------- 404 y errores (siempre JSON, sin stack en producción) ---------- */
 app.use('/api', (req, res) => {
@@ -114,6 +115,15 @@ app.use('/api', (req, res) => {
 
 /* ---------- Frontend servido desde la API (misma origen) ---------- */
 const FRONTEND_ROOT = path.resolve(__dirname, '..');
+
+/* Medios subidos (Fase 9.5B): /uploads/products/... servidos con
+   nosniff; las extensiones están restringidas por el adaptador. */
+const { UPLOADS_ROOT } = require('./src/storage');
+app.use('/uploads', express.static(UPLOADS_ROOT, {
+  index: false,
+  setHeaders(res) { res.setHeader('X-Content-Type-Options', 'nosniff'); }
+}));
+
 app.use((req, res, next) => {
   if (req.path.startsWith('/city-pets-backend') || req.path.startsWith('/.git')) {
     return res.status(404).send('Not found');
@@ -123,6 +133,12 @@ app.use((req, res, next) => {
 app.use(express.static(FRONTEND_ROOT));
 
 app.use((err, req, res, next) => {
+  if (err && err.name === 'MulterError') {
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.code === 'LIMIT_FILE_SIZE'
+      ? 'El archivo supera el tamaño máximo permitido'
+      : 'Archivo inválido' });
+  }
   const status = err.status || err.statusCode || 500;
   if (status >= 500) console.error(err);
   res.status(status).json({ error: err.expose && err.message ? err.message : 'Error interno del servidor' });

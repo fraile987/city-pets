@@ -54,6 +54,25 @@ function cap(v, max) {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
 }
 
+/* ---- Medios (Fase 9.5B) ----
+   Solo se aceptan URLs (rutas /uploads/ o http(s)), nunca Base64/data:.
+   El adaptador de almacenamiento genera las rutas; el catálogo seed y el
+   fallback de desarrollo usan https (picsum). */
+function isMediaUrl(v) {
+  return typeof v === 'string' && (v.startsWith('/uploads/') || /^https?:\/\//i.test(v));
+}
+
+function sanitizeImages(images) {
+  if (!Array.isArray(images)) return undefined;
+  return images.filter(isMediaUrl).slice(0, 5);
+}
+
+function sanitizeVideo(video) {
+  if (video === undefined) return undefined;
+  if (video === '') return '';
+  return isMediaUrl(video) ? video : '';
+}
+
 function validateProductFields(body) {
   const { name, species, category } = body;
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -90,8 +109,8 @@ async function createProduct(req, res) {
       desc: cap(req.body.desc, MAX.desc),
       dailyRation: Math.min(toNonNegInt(req.body.dailyRation), 100000),
       tags: toJsonArray(req.body.tags),
-      images: toJsonArray(req.body.images),
-      video: typeof req.body.video === 'string' ? req.body.video.slice(0, 1000) : '',
+      images: toJsonArray(sanitizeImages(req.body.images) || []),
+      video: sanitizeVideo(req.body.video) || '',
       rating: isNaN(parseFloat(req.body.rating)) ? 4.0 : Math.min(Math.max(parseFloat(req.body.rating), 0), 5)
     }
   });
@@ -138,8 +157,8 @@ async function updateProduct(req, res) {
   if (desc !== undefined) data.desc = cap(desc, MAX.desc);
   if (dailyRation !== undefined) data.dailyRation = Math.min(toNonNegInt(dailyRation), 100000);
   if (tags !== undefined) data.tags = toJsonArray(tags);
-  if (images !== undefined) data.images = toJsonArray(images);
-  if (video !== undefined) data.video = typeof video === 'string' ? video.slice(0, 1000) : '';
+  if (images !== undefined) data.images = toJsonArray(sanitizeImages(images) || []);
+  if (video !== undefined) data.video = sanitizeVideo(video);
   if (rating !== undefined) data.rating = isNaN(parseFloat(rating)) ? 4.0 : Math.min(Math.max(parseFloat(rating), 0), 5);
 
   const product = await prisma.product.update({ where: { id: existing.id }, data });
