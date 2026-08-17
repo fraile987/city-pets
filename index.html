@@ -268,7 +268,7 @@
 
         <div class="panel">
           <div class="panel-header"><h3>⚖️ Calculadora comparativa de precios</h3></div>
-          <p class="muted mb-3">Compara el precio por gramo/kilogramo de City Pets frente a otros almacenes.</p>
+          <p class="muted mb-3">Compara el precio por gramo/kilogramo de City Pets frente a otros almacenes y estima el ahorro anual según la ración diaria de tu mascota.</p>
           <div class="row">
             <div class="field grow">
               <label for="compProduct">Producto City Pets</label>
@@ -281,6 +281,10 @@
             <div class="field grow">
               <label for="compGrams">Gramaje equivalente (g)</label>
               <input id="compGrams" type="number" min="1" placeholder="Ej: 15000" />
+            </div>
+            <div class="field grow">
+              <label for="compRation">Ración diaria de tu mascota (g/día)</label>
+              <input id="compRation" type="number" min="1" placeholder="Ej: 210" />
             </div>
           </div>
           <button class="btn btn-navy" id="btnCompare">Comparar</button>

@@ -644,7 +644,7 @@
     const food = App.products.filter(p => p.grams > 0);
     const opts = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-ration="${p.dailyRation}">${esc(p.name)} (${esc(p.unit)})</option>`).join('');
     $('#calcProduct').innerHTML = opts;
-    $('#compProduct').innerHTML = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-price="${p.price}">${esc(p.name)}</option>`).join('');
+    $('#compProduct').innerHTML = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-price="${p.price}" data-ration="${p.dailyRation}">${esc(p.name)}</option>`).join('');
     $('#calcProduct').addEventListener('change', (e) => {
       const o = e.target.selectedOptions[0];
       if (!o) return;
@@ -655,6 +655,7 @@
       const o = e.target.selectedOptions[0];
       if (!o) return;
       $('#compGrams').value = o.dataset.grams;
+      $('#compRation').value = o.dataset.ration;
     });
   }
 
@@ -681,8 +682,9 @@
       const p = opt ? App.products.find(x => x.id === opt.value) : null;
       const compPrice = parseFloat($('#compPrice').value);
       const compGrams = parseFloat($('#compGrams').value);
-      if (!p || isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0) {
-        toast('Completa precio y gramaje del competidor (positivos)', 'error');
+      const compRation = parseFloat($('#compRation').value);
+      if (!p || isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0 || isNaN(compRation) || compRation <= 0) {
+        toast('Completa precio, gramaje y ración (positivos)', 'error');
         return;
       }
       const cpPrice = p.price;
@@ -697,6 +699,15 @@
       const diffLabel = equal
         ? 'Sin diferencia'
         : `${fmtMoney(Math.round(Math.abs(diff)))}/kg ${cheaper ? 'a favor de City Pets' : 'a favor del competidor'}`;
+      const annualKg = compRation * 365 / 1000;
+      const cpAnnual = cpPerKg * annualKg;
+      const compAnnual = compPerKg * annualKg;
+      const savings = compAnnual - cpAnnual;
+      const savingsLabel = equal
+        ? 'Sin ahorro anual'
+        : cheaper
+          ? `✅ ${fmtMoney(Math.round(savings))} al año (${pct}%)`
+          : `⚠️ ${fmtMoney(Math.round(Math.abs(savings)))} más al año (${pct}%)`;
       $('#compResult').innerHTML = `
         <div class="panel" style="background:var(--cloud)">
           <div class="muted" style="font-size:.85rem;margin-bottom:.5rem">${esc(p.name)} · ${esc(p.unit)}</div>
@@ -724,6 +735,14 @@
                   ? `✅ Ahorro: City Pets es ${pct}% más económico por kg`
                   : `⚠️ City Pets cuesta ${pct}% más por kg`}
             </div>
+          </div>
+          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
+            <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
+            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Basado en una ración de ${compRation} g/día y 365 días de consumo.</div>
+            <div class="summary-line"><span>Consumo anual</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
+            <div class="summary-line"><span>City Pets al año</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
+            <div class="summary-line"><span>Competidor al año</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
+            <div class="summary-line"><span>Ahorro anual</span><span style="font-weight:800;color:${diffColor}">${savingsLabel}</span></div>
           </div>
         </div>`;
     });
