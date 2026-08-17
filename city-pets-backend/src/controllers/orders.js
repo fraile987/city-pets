@@ -56,6 +56,22 @@ function toPositiveInt(v) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+/* Forma serializada de un pedido para la API (items + payment como objeto). */
+function serializeOrder(o) {
+  return {
+    ...o,
+    items: o.items.map((i) => ({
+      id: i.id,
+      productId: i.productId,
+      name: i.name,
+      qty: i.qty,
+      price: i.price,
+      image: i.image
+    })),
+    payment: parseJson(o.payment, { method: 'digital' })
+  };
+}
+
 async function listOrders(req, res) {
   const orders = await prisma.order.findMany({
     where: { userId: req.user.id },
@@ -63,20 +79,7 @@ async function listOrders(req, res) {
     orderBy: { createdAt: 'desc' }
   });
 
-  res.json(
-    orders.map((o) => ({
-      ...o,
-      items: o.items.map((i) => ({
-        id: i.id,
-        productId: i.productId,
-        name: i.name,
-        qty: i.qty,
-        price: i.price,
-        image: i.image
-      })),
-      payment: parseJson(o.payment, { method: 'digital' })
-    }))
-  );
+  res.json(orders.map(serializeOrder));
 }
 
 async function createOrder(req, res) {
@@ -183,18 +186,7 @@ async function createOrder(req, res) {
       });
     });
 
-    res.status(201).json({
-      ...order,
-      items: order.items.map((i) => ({
-        id: i.id,
-        productId: i.productId,
-        name: i.name,
-        qty: i.qty,
-        price: i.price,
-        image: i.image
-      })),
-      payment: parseJson(order.payment, { method: 'digital' })
-    });
+    res.status(201).json(serializeOrder(order));
   } catch (e) {
     if (e.message && e.message.startsWith('Stock insuficiente')) {
       return res.status(400).json({ error: e.message });
@@ -203,4 +195,4 @@ async function createOrder(req, res) {
   }
 }
 
-module.exports = { listOrders, createOrder };
+module.exports = { listOrders, createOrder, serializeOrder };

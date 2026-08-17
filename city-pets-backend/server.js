@@ -21,6 +21,7 @@ app.use('/api/products', require('./src/routes/products'));
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/pets', require('./src/routes/pets'));
 app.use('/api/orders', require('./src/routes/orders'));
+app.use('/api/admin', require('./src/routes/admin'));
 
 /* ---------- Arranque ---------- */
 const PORT = process.env.PORT || 3000;
