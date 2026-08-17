@@ -3,6 +3,7 @@
    ========================================================= */
 
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
@@ -17,7 +18,21 @@ const app = express();
 app.disable('x-powered-by');
 
 /* ---------- Middlewares ---------- */
-app.use(cors());
+/* CORS restringido: mismo origen, localhost/127.0.0.1 en desarrollo,
+   o la lista CORS_ORIGINS (separada por comas) si está definida. */
+const DEV_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const configuredOrigins = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin || (configuredOrigins.length ? configuredOrigins.includes(origin) : DEV_ORIGIN_RE.test(origin))) {
+      return cb(null, true);
+    }
+    return cb(null, false);
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: '2mb' }));
 
 /* ---------- Rutas ---------- */
@@ -35,6 +50,16 @@ app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada' });
 });
+
+/* ---------- Frontend servido desde la API (misma origen) ---------- */
+const FRONTEND_ROOT = path.resolve(__dirname, '..');
+app.use((req, res, next) => {
+  if (req.path.startsWith('/city-pets-backend') || req.path.startsWith('/.git')) {
+    return res.status(404).send('Not found');
+  }
+  next();
+});
+app.use(express.static(FRONTEND_ROOT));
 
 app.use((err, req, res, next) => {
   const status = err.status || err.statusCode || 500;

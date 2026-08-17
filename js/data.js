@@ -15,7 +15,9 @@ const CHANNELS = ['Instagram', 'Facebook', 'WhatsApp', 'TikTok', 'Google', 'Refe
    Cliente HTTP hacia el backend (Fase 7.1)
    La sesión ahora se mantiene con el token JWT en cp_session.
    ========================================================= */
-const API_BASE = 'http://localhost:3000/api';
+/* El frontend lo sirve el propio backend (misma origen), así que la
+   API es relativa. En producción se sirve igual desde el mismo host. */
+const API_BASE = '/api';
 
 function getToken() {
   try { return localStorage.getItem(STORE.session); } catch { return null; }

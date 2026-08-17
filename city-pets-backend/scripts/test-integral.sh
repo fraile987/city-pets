@@ -301,3 +301,35 @@ check "concurrencia: una sola compra gana (201 y 400)" "$(echo "$CONC" | cut -d'
 check "mensaje de stock insuficiente" "$(echo "$CONC" | cut -d'|' -f2)" "1"
 check "stock final 0 (no se vendio de mas)" "$(req /products | body_of | json 'j.find(x=>x.id===v).stock' "$PIDCONC")" "0"
 check "solo 1 pedido con el producto" "$(req /admin/orders "$TANA" | body_of | json 'j.filter(o=>o.items.some(i=>i.productId===v)).length' "$PIDCONC")" "1"
+
+echo ""
+echo "===== G9. Fase 9.2: rate-limit, CORS y API relativa ====="
+ROOT="http://localhost:3000"
+# --- API_BASE relativa ---
+if grep -q "const API_BASE = '/api'" ../js/data.js && ! grep -q 'localhost:3000/api' ../js/data.js; then
+  ok "API_BASE relativa en data.js"
+else
+  ko "API_BASE no es relativa"
+fi
+# --- rate-limit conectado ---
+if [ -f src/middleware/rate-limit.js ] && grep -q 'rateLimit(' src/routes/auth.js; then
+  ok "rate-limit conectado en login/register"
+else
+  ko "rate-limit no conectado en auth"
+fi
+# --- CORS con whitelist (no desnudo) ---
+if grep -q 'DEV_ORIGIN_RE' server.js && ! grep -q '^app.use(cors());' server.js; then
+  ok "CORS restringido por origen en server.js"
+else
+  ko "CORS sigue abierto"
+fi
+# --- frontend servido por la API con bloqueo del backend ---
+if grep -q 'express.static(FRONTEND_ROOT)' server.js && grep -q 'city-pets-backend' server.js; then
+  ok "server.js sirve el frontend y bloquea city-pets-backend"
+else
+  ko "servido estático no configurado"
+fi
+check "frontend servido por la API (index)" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/")" "200"
+check "backend bloqueado (404)" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/city-pets-backend/server.js")" "404"
+check "CORS: origen externo sin cabecera ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: https://evil.example.com' "$B/health" | grep -ci 'access-control-allow-origin')" "0"
+check "CORS: localhost de desarrollo permitido" "$(curl -s -D - -o /dev/null -H 'Origin: http://localhost:5500' "$B/health" | grep -ci 'access-control-allow-origin')" "1"
