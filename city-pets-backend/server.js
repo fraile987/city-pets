@@ -6,6 +6,7 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 
 /* ---------- Guard de arranque (fail fast) ---------- */
 const JWT_SECRET = process.env.JWT_SECRET || '';
@@ -16,6 +17,43 @@ if (!JWT_SECRET || JWT_SECRET === 'cambia-esto-por-un-secreto-seguro' || JWT_SEC
 
 const app = express();
 app.disable('x-powered-by');
+
+/* ---------- Cabeceras de seguridad (Fase 9.3.1) ----------
+   Helmet con CSP adaptada a City Pets:
+   - style-src 'unsafe-inline' porque la interfaz usa estilos inline
+     (se retirará en una fase futura para endurecer la política).
+   - img-src permite picsum.photos (imágenes seed y fallback del admin)
+     y data:/blob: (imágenes subidas como base64).
+   - COEP desactivado: requiere-CORP bloquearía las imágenes externas.
+   - HSTS NO activado: solo se habilitará cuando el sitio esté bajo HTTPS. */
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      'default-src': ["'self'"],
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'img-src': ["'self'", 'data:', 'blob:', 'https://*.picsum.photos'],
+      'media-src': ["'self'", 'data:', 'blob:'],
+      'connect-src': ["'self'"],
+      'font-src': ["'self'"],
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'frame-ancestors': ["'self'"]
+    }
+  },
+  strictTransportSecurity: false,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  crossOriginResourcePolicy: { policy: 'same-origin' }
+}));
+
+/* Permissions-Policy: helmet 8 ya no la incluye; ninguna feature se usa. */
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  next();
+});
 
 /* ---------- Middlewares ---------- */
 /* CORS restringido: mismo origen, localhost/127.0.0.1 en desarrollo,

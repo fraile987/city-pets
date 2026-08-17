@@ -64,6 +64,7 @@ req(){ # req <path> [token] [data] -> imprime "CODE|body" (GET o POST con data)
 }
 code_of(){ if [ $# -gt 0 ]; then echo "$1" | cut -d'|' -f2; else cut -d'|' -f2; fi; }
 body_of(){ if [ $# -gt 0 ]; then echo "$1" | cut -d'|' -f1; else cut -d'|' -f1; fi; }
+hdr(){ curl -s -D - -o /dev/null "$1" | tr -d '\r' | grep -i "$2" | sed 's/^[^:]*:[[:space:]]*//'; }
 
 #================================================================
 echo ""
@@ -367,3 +368,36 @@ if grep -q "Number(grams).toLocaleString" ../js/app.js && ! grep -q 'fmtMoney(gr
 else
   ko "gramaje sigue con fmtMoney"
 fi
+
+echo ""
+echo "===== G11. Fase 9.3.1: Helmet, CSP y cabeceras de seguridad ====="
+# --- cabeceras presentes en API y frontend ---
+check "CSP presente en health" "$(curl -s -D - -o /dev/null "$B/health" | grep -ci '^content-security-policy:')" "1"
+check "CSP presente en index" "$(curl -s -D - -o /dev/null "$ROOT/" | grep -ci '^content-security-policy:')" "1"
+check "CSP presente en admin.html" "$(curl -s -D - -o /dev/null "$ROOT/admin.html" | grep -ci '^content-security-policy:')" "1"
+check "X-Content-Type-Options nosniff" "$(hdr "$B/health" x-content-type-options)" "nosniff"
+check "Referrer-Policy strict-origin-when-cross-origin" "$(hdr "$B/health" referrer-policy)" "strict-origin-when-cross-origin"
+check "X-Frame-Options SAMEORIGIN" "$(hdr "$B/health" x-frame-options)" "SAMEORIGIN"
+check "Permissions-Policy presente" "$(hdr "$B/health" permissions-policy)" "camera=(), microphone=(), geolocation=(), payment=()"
+check "Cross-Origin-Resource-Policy same-origin" "$(hdr "$B/health" cross-origin-resource-policy)" "same-origin"
+check "sin HSTS (se activa solo bajo HTTPS)" "$(curl -s -D - -o /dev/null "$B/health" | grep -ci 'strict-transport-security')" "0"
+check "sin COEP (recursos externos ok)" "$(curl -s -D - -o /dev/null "$B/health" | grep -ci 'cross-origin-embedder-policy')" "0"
+# --- directivas de la política CSP ---
+CSP=$(hdr "$ROOT/" content-security-policy)
+check "CSP default-src 'self'" "$(echo "$CSP" | grep -o "default-src '[^']*'")" "default-src 'self'"
+check "CSP script-src 'self'" "$(echo "$CSP" | grep -o "script-src '[^']*'")" "script-src 'self'"
+check "CSP style-src con unsafe-inline" "$(echo "$CSP" | grep -o 'style-src [^;]*')" "style-src 'self' 'unsafe-inline'"
+check "CSP img-src con picsum" "$(echo "$CSP" | grep -o 'img-src [^;]*')" "img-src 'self' data: blob: https://*.picsum.photos"
+check "CSP media-src data/blob" "$(echo "$CSP" | grep -o 'media-src [^;]*')" "media-src 'self' data: blob:"
+check "CSP connect-src 'self'" "$(echo "$CSP" | grep -o "connect-src '[^']*'")" "connect-src 'self'"
+check "CSP object-src 'none'" "$(echo "$CSP" | grep -o "object-src '[^']*'")" "object-src 'none'"
+check "CSP frame-ancestors 'self'" "$(echo "$CSP" | grep -o "frame-ancestors '[^']*'")" "frame-ancestors 'self'"
+check "CSP sin upgrade-insecure-requests (dev)" "$(echo "$CSP" | grep -ci 'upgrade-insecure-requests')" "0"
+# --- recursos del frontend siguen servidos (misma origen, 'self') ---
+check "index.html servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/")" "200"
+check "admin.html servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/admin.html")" "200"
+check "css/styles.css servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/css/styles.css")" "200"
+check "js/app.js servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/js/app.js")" "200"
+check "js/admin.js servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/js/admin.js")" "200"
+check "assets/logo.svg servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/assets/logo.svg")" "200"
+check "assets/hero-dog.svg servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/assets/hero-dog.svg")" "200"
