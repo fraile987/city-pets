@@ -830,4 +830,109 @@ fi
 kill "$PROXY_PID" 2>/dev/null; wait "$PROXY_PID" 2>/dev/null
 kill "$SBOX_PID" 2>/dev/null; wait "$SBOX_PID" 2>/dev/null
 rm -rf "$SBOX"
+
+echo ""
+echo "===== G18. Fase 10.3: deploy completo en laboratorio ====="
+SBOX=/tmp/citypets-g18-vps
+SBOX_APP="$SBOX/opt/city-pets"
+SBOX_BE="$SBOX_APP/city-pets-backend"
+SBOX_LIB="$SBOX/var/lib/city-pets"
+SBOX_DATA="$SBOX_LIB/data"
+SBOX_MEDIA="$SBOX_LIB/uploads"
+SBOX_BKP="$SBOX_LIB/backups"
+SBOX_PORT=3102
+BEFORE_U=$(ls uploads/products 2>/dev/null | md5sum | cut -d' ' -f1)
+BEFORE_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
+# 1/16 usuario citypets: lo crea el aprovisionamiento (idempotente)
+grep -q 'useradd --create-home --shell /bin/bash --groups sudo' scripts/setup-vps.sh && ok "10.3: setup-vps crea el usuario citypets con sudo" || ko "10.3: setup-vps no crea el usuario"
+grep -q 'id ".NEW_USER.' scripts/setup-vps.sh && ok "10.3: setup-vps es idempotente (no duplica el usuario)" || ko "10.3: setup-vps sin guard de usuario"
+# 3/16 Node 24 LTS
+case "$(node -v)" in
+  v24.*) ok "10.3: Node 24 LTS presente ($(node -v))" ;;
+  *) ko "10.3: Node no es 24 LTS ($(node -v))" ;;
+esac
+# 2/16 estructura persistente: simula /opt/city-pets + /var/lib/city-pets
+rm -rf "$SBOX"
+mkdir -p "$SBOX_APP"
+tar -C .. --exclude='.git' --exclude='city-pets-backend/node_modules' --exclude='city-pets-backend/prisma/dev.db*' --exclude='city-pets-backend/uploads' --exclude='city-pets-backend/backups' --exclude='city-pets-backend/.env' -cf - . | tar -xf - -C "$SBOX_APP"
+mkdir -p "$SBOX_DATA" "$SBOX_MEDIA" "$SBOX_BKP"
+[ -f "$SBOX_BE/package.json" ] && ok "10.3: copia limpia del working tree" || ko "10.3: checkout del repo fallo"
+[ -d "$SBOX_DATA" ] && [ -d "$SBOX_MEDIA" ] && [ -d "$SBOX_BKP" ] && ok "10.3: estructura /var/lib/city-pets/{data,uploads,backups}" || ko "10.3: estructura incompleta"
+# 6/16 .env de produccion en el backend
+printf 'NODE_ENV=production\nPORT=%s\nHOST=127.0.0.1\nDATABASE_URL=file:%s/dev.db\nUPLOADS_PATH=%s\nJWT_SECRET=ciudad-10-3-sandbox-secreto\nCORS_ORIGINS=https://citypets.com,https://www.citypets.com\n' "$SBOX_PORT" "$SBOX_DATA" "$SBOX_MEDIA" > "$SBOX_BE/.env"
+[ -f "$SBOX_BE/.env" ] && ok "10.3: .env de produccion creado" || ko "10.3: .env no creado"
+# 8/16 servicio bajo "systemd": supervisor que replica Restart=on-failure + RestartSec=2
+PATH="$PATH" HOME="$HOME" NODE_ENV=production HOST=127.0.0.1 PORT="$SBOX_PORT" \
+  DATABASE_URL="file:$SBOX_DATA/dev.db" UPLOADS_PATH="$SBOX_MEDIA" \
+  JWT_SECRET='ciudad-10-3-sandbox-secreto' \
+  CORS_ORIGINS='https://citypets.com,https://www.citypets.com' \
+  bash scripts/lab-supervisor.sh "$SBOX_BE" > /tmp/citypets-g18-sup.log 2>&1 &
+SUP_PID=$!
+# 4/5/7 deploy.sh: npm ci + migraciones + healthcheck (sobre la copia limpia)
+APP_DIR="$SBOX_APP" DATA_DIR="$SBOX_DATA" MEDIA_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" \
+  APP_USER="$(id -un)" DEPLOY_SYSTEMD=0 HEALTH_URL="http://127.0.0.1:$SBOX_PORT/api/health" \
+  bash "$SBOX_BE/deploy/deploy.sh" > /tmp/citypets-g18-deploy.log 2>&1
+RC=$?
+check "10.3: deploy.sh OK (npm ci + prisma migrate deploy)" "$RC" "0"
+[ -f "$SBOX_DATA/dev.db" ] && ok "10.3: migraciones crean dev.db en el volumen" || ko "10.3: dev.db ausente en DATA_DIR"
+check "10.3: healthcheck tras deploy 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/api/health)" "200"
+check "10.3: BD inicial vacia" "$(curl -s http://127.0.0.1:$SBOX_PORT/api/products | json 'j.length')" "0"
+# 12/16 crear datos y archivos (admin, producto, media)
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$SBOX_PORT/api/auth/register" -H 'Content-Type: application/json' -d '{"name":"G18 Admin","phone":"3005550777","email":"g18vps@test.co","password":"clave123"}')
+TG18=$(body_of "$R" | json 'j.token')
+(cd "$SBOX_BE" && npm run promote -- g18vps@test.co >/dev/null 2>&1)
+[ "${TG18:0:4}" = "eyJh" ] && ok "10.3: admin registrado y promovido" || ko "10.3: admin fallo"
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$SBOX_PORT/api/products" -H "Authorization: Bearer $TG18" -H 'Content-Type: application/json' -d '{"name":"Deploy1","species":"Perros","price":8500}')
+check "10.3: producto creado" "$(code_of "$R")" "201"
+node scripts/gen-test-png.js /tmp/cp-g18-media.png >/dev/null
+UP=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TG18" -F 'file=@/tmp/cp-g18-media.png' "http://127.0.0.1:$SBOX_PORT/api/upload/image")
+check "10.3: media subido" "$(code_of "$UP")" "201"
+[ -n "$(ls -A "$SBOX_MEDIA/products" 2>/dev/null)" ] && ok "10.3: archivo en el volumen de medios" || ko "10.3: sin archivo en MEDIA_DIR"
+# 10/11 nginx simulado -> Express -> /api/health y /uploads
+PORT=8080 TARGET="$SBOX_PORT" node scripts/test-proxy.js > /tmp/citypets-g18-proxy.log 2>&1 &
+PROXY_PID=$!
+sleep 1
+check "10.3: nginx-sim: /api/health 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/health)" "200"
+PIMG=$(ls -1 "$SBOX_MEDIA/products" 2>/dev/null | head -1)
+[ -n "$PIMG" ] && check "10.3: nginx-sim: /uploads 200" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080/uploads/products/$PIMG")" "200" || ko "10.3: sin media para /uploads"
+kill "$PROXY_PID" 2>/dev/null; wait "$PROXY_PID" 2>/dev/null
+# 9/16 caida y recuperacion automatica (Restart=on-failure)
+CPID=$(pgrep -P "$SUP_PID" || true)
+[ -n "$CPID" ] && ok "10.3: server activo bajo el supervisor" || ko "10.3: supervisor sin server activo"
+kill -9 "$CPID" 2>/dev/null || true
+sleep 4
+NPID=$(pgrep -P "$SUP_PID" || true)
+[ -n "$NPID" ] && [ "$NPID" != "$CPID" ] && ok "10.3: recuperacion: reiniciado tras kill -9" || ko "10.3: recuperacion: no hubo reinicio"
+check "10.3: recuperacion: health 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/api/health)" "200"
+check "10.3: recuperacion: datos conservados" "$(curl -s http://127.0.0.1:$SBOX_PORT/api/products | json 'j.some(p=>p.name==="Deploy1")')" "true"
+# 13/14 redeploy: repetir deploy.sh; los datos sobreviven
+APP_DIR="$SBOX_APP" DATA_DIR="$SBOX_DATA" MEDIA_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" \
+  APP_USER="$(id -un)" DEPLOY_SYSTEMD=0 HEALTH_URL="http://127.0.0.1:$SBOX_PORT/api/health" \
+  bash "$SBOX_BE/deploy/deploy.sh" > /tmp/citypets-g18-deploy2.log 2>&1
+RC=$?
+check "10.3: redeploy: deploy.sh OK" "$RC" "0"
+check "10.3: redeploy: producto sobrevive" "$(curl -s http://127.0.0.1:$SBOX_PORT/api/products | json 'j.some(p=>p.name==="Deploy1")')" "true"
+[ -n "$(ls -A "$SBOX_MEDIA/products" 2>/dev/null)" ] && ok "10.3: redeploy: uploads sobreviven" || ko "10.3: redeploy: uploads perdidos"
+# 15/16 backup y restore (round-trip)
+DB_PATH="$SBOX_DATA/dev.db" UPLOADS_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" bash "$SBOX_BE/scripts/backup.sh" > /tmp/citypets-g18-backup.log 2>&1
+BKP=$(ls -1t "$SBOX_BKP"/citypets-*.tar.gz 2>/dev/null | head -1)
+[ -n "$BKP" ] && ok "10.3: backup creado en el volumen" || ko "10.3: backup ausente"
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$SBOX_PORT/api/products" -H "Authorization: Bearer $TG18" -H 'Content-Type: application/json' -d '{"name":"Temporal","species":"Gatos","price":9999}')
+check "10.3: producto Temporal creado (para restaurar)" "$(code_of "$R")" "201"
+kill "$(pgrep -P "$SUP_PID" || true)" 2>/dev/null || true
+sleep 3
+DB_PATH="$SBOX_DATA/dev.db" UPLOADS_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" bash "$SBOX_BE/scripts/restore.sh" "$BKP" --force --no-safety > /tmp/citypets-g18-restore.log 2>&1
+check "10.3: restore ejecutado" "$?" "0"
+kill "$(pgrep -P "$SUP_PID" || true)" 2>/dev/null || true
+sleep 3
+check "10.3: restore: dato del backup presente" "$(curl -s http://127.0.0.1:$SBOX_PORT/api/products | json 'j.some(p=>p.name==="Deploy1")')" "true"
+check "10.3: restore: mutacion revertida (sin Temporal)" "$(curl -s http://127.0.0.1:$SBOX_PORT/api/products | json 'j.some(p=>p.name==="Temporal")')" "false"
+[ -n "$(ls -A "$SBOX_MEDIA/products" 2>/dev/null)" ] && ok "10.3: restore: medios restaurados" || ko "10.3: restore: medios perdidos"
+# 16/16 el repo no se toca
+AFTER_U=$(ls uploads/products 2>/dev/null | md5sum | cut -d' ' -f1)
+AFTER_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
+[ "$AFTER_U" = "$BEFORE_U" ] && ok "10.3: uploads/ del repo intacto" || ko "10.3: se escribio en uploads/ del repo"
+[ "$AFTER_D" = "$BEFORE_D" ] && ok "10.3: BD del repo intacta" || ko "10.3: se escribio en la BD del repo"
+kill "$SUP_PID" 2>/dev/null; wait "$SUP_PID" 2>/dev/null
+rm -rf "$SBOX"
 [ "$FAIL" -eq 0 ]

@@ -13,6 +13,7 @@
 # Configurable por variables de entorno (defaults que coinciden con
 # deploy/city-pets.service y .env.example de producción):
 #   APP_USER, APP_DIR, DATA_DIR, MEDIA_DIR, BACKUP_DIR, SERVICE, HEALTH_URL
+#   DEPLOY_SYSTEMD=0  -> modo laboratorio/CI: no reinicia el servicio
 #
 # NOTAS:
 #   - npm ci ejecuta el postinstall "prisma generate" (no se duplica aquí).
@@ -49,15 +50,26 @@ npm ci
 
 # Permisos de las rutas de datos (BD, medios, backups). Deben existir
 # antes de las migraciones: SQLite crea dev.db en DATA_DIR (DATABASE_URL).
-install -d -o "$APP_USER" -g "$APP_USER" "$DATA_DIR" "$MEDIA_DIR" "$BACKUP_DIR"
-chown -R "$APP_USER":"$APP_USER" .env
-chmod 600 .env
+if [ "$(id -u)" -eq 0 ]; then
+  install -d -o "$APP_USER" -g "$APP_USER" "$DATA_DIR" "$MEDIA_DIR" "$BACKUP_DIR"
+  chown -R "$APP_USER":"$APP_USER" .env
+  chmod 600 .env
+else
+  # Laboratorio/CI sin root: se crean las rutas sin fijar owner.
+  install -d "$DATA_DIR" "$MEDIA_DIR" "$BACKUP_DIR"
+  chmod 600 .env
+  echo "[AVISO] sin root: no se fija owner '$APP_USER' (en el VPS usa sudo)."
+fi
 
 # Aplicar migraciones pendientes
 npx prisma migrate deploy
 
-# Reinicio del servicio
-systemctl restart "$SERVICE"
+# Reinicio del servicio (DEPLOY_SYSTEMD=0 => laboratorio/CI, sin systemd)
+if [ "${DEPLOY_SYSTEMD:-1}" = "1" ]; then
+  systemctl restart "$SERVICE"
+else
+  echo "[AVISO] DEPLOY_SYSTEMD=0: el servicio no se reinicia (laboratorio/CI)."
+fi
 
 # Healthcheck posterior
 for i in $(seq 1 30); do
@@ -68,5 +80,7 @@ for i in $(seq 1 30); do
   sleep 1
 done
 echo "[ERROR] Healthcheck falló tras 30 s: $HEALTH_URL"
-systemctl status "$SERVICE" --no-pager || true
+if [ "${DEPLOY_SYSTEMD:-1}" = "1" ]; then
+  systemctl status "$SERVICE" --no-pager || true
+fi
 exit 1
