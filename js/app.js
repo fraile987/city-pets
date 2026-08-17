@@ -133,7 +133,11 @@
     if (currentFilter !== 'todos') list = list.filter(p => p.species === currentFilter);
     $('#noProducts').classList.toggle('hidden', list.length > 0);
     $('#storeTitle').textContent = currentFilter === 'todos' ? 'Todos los productos' : 'Productos para ' + currentFilter;
-    grid.innerHTML = list.map(p => `
+    grid.innerHTML = list.map(p => {
+      const outOfStock = p.stock <= 0;
+      const lowStock = !outOfStock && p.stock <= 15;
+      const perKg = p.grams > 0 ? fmtMoney(Math.round(p.price / p.grams * 1000)) : null;
+      return `
       <article class="card" data-product="${p.id}">
         <div class="card-media">
           <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" loading="lazy" />
@@ -148,12 +152,15 @@
             <span class="price money">${fmtMoney(p.price)}</span>
             <span class="unit">${esc(p.unit)}</span>
           </div>
+          ${perKg ? `<div class="muted" style="font-size:.78rem">${perKg}/kg · ${esc(p.dailyRation)} g/día</div>` : ''}
+          ${lowStock ? `<span class="badge badge-red">Solo quedan ${p.stock}</span>` : ''}
         </div>
         <div class="card-footer">
-          <button class="btn btn-navy grow" data-add="${p.id}">Añadir al carrito</button>
+          <button class="btn btn-navy grow" data-add="${p.id}" ${outOfStock ? 'disabled' : ''}>${outOfStock ? 'Agotado' : 'Añadir al carrito'}</button>
           <button class="btn btn-outline" data-view="${p.id}">Ver</button>
         </div>
-      </article>`).join('');
+      </article>`;
+    }).join('');
   }
 
   function openProductModal(id) {
