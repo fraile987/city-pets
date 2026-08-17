@@ -498,3 +498,44 @@ check "video guardado sin truncar" "$(body_of "$R" | json 'j.video')" "$VIDURL"
 R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"Sin Base64","species":"Gatos","price":1,"images":["data:image/png;base64,AAAA"],"video":"data:video/mp4;base64,AAAA"}')
 check "base64 en images se descarta" "$(body_of "$R" | json 'JSON.stringify(j.images)')" "[]"
 check "base64 en video se descarta" "$(body_of "$R" | json 'JSON.stringify(j.video)')" '""'
+
+echo ""
+echo "===== G14. Fase 9.5C: backups y restauración ====="
+# --- estática ---
+[ -f scripts/backup.sh ] && ok "backup.sh presente" || ko "backup.sh ausente"
+[ -x scripts/backup.sh ] && ok "backup.sh ejecutable" || ko "backup.sh no es ejecutable"
+[ -f scripts/restore.sh ] && ok "restore.sh presente" || ko "restore.sh ausente"
+[ -x scripts/restore.sh ] && ok "restore.sh ejecutable" || ko "restore.sh no es ejecutable"
+grep -q '^backups/' .gitignore && ok ".gitignore ignora backups/" || ko ".gitignore sin backups/"
+
+# --- backup crea tar.gz con dev.db y uploads ---
+rm -rf backups
+mkdir -p uploads/products
+printf 'backup test' > uploads/products/g14.txt
+bash scripts/backup.sh >/dev/null
+B1="$(ls -1t backups/ | head -1)"
+[ -n "$B1" ] && ok "backup genera tar.gz" || ko "no se generó backup"
+tar -tzf "backups/$B1" | grep -q 'dev.db' && ok "backup contiene dev.db" || ko "backup sin dev.db"
+tar -tzf "backups/$B1" | grep -q 'uploads/products/g14.txt' && ok "backup contiene uploads" || ko "backup sin uploads"
+
+# --- rotación con BACKUP_KEEP ---
+BACKUP_KEEP=2 bash scripts/backup.sh >/dev/null
+BACKUP_KEEP=2 bash scripts/backup.sh >/dev/null
+check "rotación conserva 2 copias" "$(ls -1 backups/citypets-*.tar.gz | wc -l)" "2"
+
+# --- restauración: producto y archivo recuperados ---
+R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"Restaurame","species":"Perros","price":5000}')
+check "producto Restaurame creado" "$(code_of "$R")" "201"
+RPID=$(body_of "$R" | json 'j.id')
+bash scripts/backup.sh >/dev/null
+curl -s -o /dev/null -X DELETE "$B/products/$RPID" -H "Authorization: Bearer $TANA"
+check "producto borrado" "$(req /products "$TANA" | body_of | json 'j.some(p=>p.id==="'"$RPID"'")')" "false"
+rm -f uploads/products/g14.txt
+kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
+B2="$(ls -1t backups/ | head -1)"
+bash scripts/restore.sh "backups/$B2" --force --no-safety >/dev/null
+node server.js > /tmp/citypets-integral-server.log 2>&1 &
+SERVER_PID=$!
+sleep 2
+check "producto restaurado" "$(req /products "$TANA" | body_of | json 'j.some(p=>p.name==="Restaurame")')" "true"
+[ -f uploads/products/g14.txt ] && ok "archivo uploads restaurado" || ko "archivo uploads no restaurado"
