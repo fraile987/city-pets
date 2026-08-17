@@ -2,7 +2,7 @@
 # =========================================================
 # CITY PETS — Restauración desde un backup (Fase 9.5C)
 #
-# Restaura prisma/dev.db y uploads/ desde backups/citypets-*.tar.gz.
+# Restaura la BD SQLite y los medios desde backups/citypets-*.tar.gz.
 # Antes de sobrescribir hace un snapshot de seguridad del estado actual.
 #
 # Uso:
@@ -10,6 +10,8 @@
 #   bash scripts/restore.sh backups/citypets-XXXX.tar.gz
 #   bash scripts/restore.sh <backup> --force         # sin confirmación
 #   bash scripts/restore.sh <backup> --no-safety     # sin snapshot previo
+#   DB_PATH=/var/lib/city-pets/data/dev.db UPLOADS_DIR=/var/lib/city-pets/uploads \
+#     bash scripts/restore.sh ...                    # rutas de producción (Fase 9.6)
 #
 # NOTA: detén el server antes de restaurar; los pools de conexión de
 # Prisma guardan el archivo antiguo en memoria.
@@ -18,6 +20,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BACKUP_DIR="backups"
+DB="${DB_PATH:-prisma/dev.db}"
+UPLOADS_DIR="${UPLOADS_DIR:-uploads}"
 FORCE="0"
 SAFETY="1"
 SRC=""
@@ -41,7 +45,7 @@ echo "  contenido:"
 tar -tzf "$SRC"
 
 if [ "$FORCE" != "1" ]; then
-  read -r -p "¿Restaurar? Sobrescribe dev.db y uploads/ [s/N] " resp
+  read -r -p "¿Restaurar? Sobrescribe la BD y los medios [s/N] " resp
   case "$resp" in s|S|si|SI|y|Y) ;; *) echo "Cancelado."; exit 0 ;; esac
 fi
 
@@ -55,16 +59,16 @@ TMP="$(mktemp -d)"
 tar -xzf "$SRC" -C "$TMP"
 
 # Restaurar la BD (limpiando sidecars previos para evitar mezclas)
-rm -f prisma/dev.db prisma/dev.db-journal prisma/dev.db-wal prisma/dev.db-shm
-cp "$TMP/dev.db" prisma/dev.db
-[ -f "$TMP/dev.db-journal" ] && cp "$TMP/dev.db-journal" prisma/
-[ -f "$TMP/dev.db-wal" ] && cp "$TMP/dev.db-wal" prisma/
-[ -f "$TMP/dev.db-shm" ] && cp "$TMP/dev.db-shm" prisma/
+rm -f "$DB" "$DB-journal" "$DB-wal" "$DB-shm"
+cp "$TMP/dev.db" "$DB"
+[ -f "$TMP/dev.db-journal" ] && cp "$TMP/dev.db-journal" "$(dirname "$DB")/"
+[ -f "$TMP/dev.db-wal" ] && cp "$TMP/dev.db-wal" "$(dirname "$DB")/"
+[ -f "$TMP/dev.db-shm" ] && cp "$TMP/dev.db-shm" "$(dirname "$DB")/"
 
 # Restaurar los medios
 if [ -d "$TMP/uploads" ]; then
-  mkdir -p uploads
-  cp -r "$TMP"/uploads/. uploads/
+  mkdir -p "$UPLOADS_DIR"
+  cp -r "$TMP"/uploads/. "$UPLOADS_DIR/"
 fi
 rm -rf "$TMP"
 

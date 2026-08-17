@@ -10,7 +10,12 @@ const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 
-const UPLOADS_ROOT = path.resolve(__dirname, '../../uploads');
+/* Ubicación de los medios (Fase 9.6): configurable vía UPLOADS_PATH.
+   En producción apuntará a un volumen fuera del código
+   (p. ej. /var/lib/city-pets/uploads); en desarrollo el default actual. */
+const UPLOADS_ROOT = process.env.UPLOADS_PATH
+  ? path.resolve(process.env.UPLOADS_PATH)
+  : path.resolve(__dirname, '../../uploads');
 const CATEGORY = 'products';
 
 /* MIME permitidos y extensión derivada (nunca la del nombre del cliente). */

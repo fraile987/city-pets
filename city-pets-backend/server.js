@@ -25,8 +25,25 @@ if (!JWT_SECRET || JWT_SECRET === 'cambia-esto-por-un-secreto-seguro' || JWT_SEC
   process.exit(1);
 }
 
+/* ---------- Interfaz de escucha (Fase 9.6) ----------
+   Desarrollo: 0.0.0.0 (accesible desde la red local para pruebas).
+   Producción: 127.0.0.1 (solo nginx debe exponer el servicio).
+   Un despliegue de producción escuchando en 0.0.0.0/:: es un error de
+   configuración peligroso: el arranque aborta (fail-fast). */
+const HOST = process.env.HOST || (IS_PROD ? '127.0.0.1' : '0.0.0.0');
+if (IS_PROD && (HOST === '0.0.0.0' || HOST === '::')) {
+  console.error(`[FATAL] Producción no puede escuchar en ${HOST}: nginx debe ser la única entrada (usa HOST=127.0.0.1).`);
+  process.exit(1);
+}
+
 const app = express();
 app.disable('x-powered-by');
+
+/* ---------- Proxy de confianza (Fase 9.6) ----------
+   Detrás de nginx, Express confía SOLO en el proxy inmediato (1) para
+   leer X-Forwarded-For y conocer la IP real del cliente. En desarrollo
+   no hay proxy: se ignora cualquier cabecera forjada por el cliente. */
+app.set('trust proxy', IS_PROD ? 1 : false);
 
 /* ---------- Cabeceras de seguridad (Fase 9.3.1) ----------
    Helmet con CSP adaptada a City Pets:
@@ -98,7 +115,7 @@ app.use(express.json({ limit: '2mb' }));
 
 /* ---------- Rutas ---------- */
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', ip: req.ip });
 });
 
 app.use('/api/products', require('./src/routes/products'));
@@ -147,6 +164,6 @@ app.use((err, req, res, next) => {
 /* ---------- Arranque ---------- */
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`City Pets API [${NODE_ENV}] escuchando en http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`City Pets API [${NODE_ENV}] escuchando en http://${HOST}:${PORT}`);
 });

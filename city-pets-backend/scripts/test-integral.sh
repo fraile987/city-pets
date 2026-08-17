@@ -430,6 +430,43 @@ if grep -q '^NODE_ENV' .env.example && grep -q '^PORT' .env.example; then
 else
   ko ".env.example incompleto"
 fi
+# --- Fase 9.6: HOST, trust proxy, UPLOADS_PATH, postinstall ---
+if grep -q "IS_PROD ? '127.0.0.1'" server.js; then
+  ok "prod escucha en 127.0.0.1 por defecto"
+else
+  ko "prod no limita HOST a loopback"
+fi
+if grep -q "HOST === '0.0.0.0'" server.js; then
+  ok "fail-fast ante HOST wildcard en prod"
+else
+  ko "sin guard de HOST"
+fi
+if grep -q "app.set('trust proxy', IS_PROD ? 1 : false)" server.js; then
+  ok "trust proxy explícito por entorno"
+else
+  ko "trust proxy no configurado"
+fi
+if grep -q '^HOST' .env.example && grep -q '^UPLOADS_PATH' .env.example; then
+  ok ".env.example documenta HOST y UPLOADS_PATH"
+else
+  ko ".env.example sin HOST/UPLOADS_PATH"
+fi
+if grep -q '"postinstall".*"prisma generate"' package.json; then
+  ok "postinstall regenera client Prisma"
+else
+  ko "sin postinstall de prisma generate"
+fi
+if grep -q 'UPLOADS_PATH' src/storage/index.js; then
+  ok "UPLOADS_PATH configurable en storage"
+else
+  ko "UPLOADS_PATH no usado en storage"
+fi
+if grep -q 'DB_PATH' scripts/backup.sh && grep -q 'UPLOADS_DIR' scripts/backup.sh \
+   && grep -q 'DB_PATH' scripts/restore.sh && grep -q 'UPLOADS_DIR' scripts/restore.sh; then
+  ok "backup/restore leen rutas de env"
+else
+  ko "backup/restore sin rutas de env"
+fi
 # --- fail-fast: arranques inválidos deben abortar (exit != 0) ---
 NODE_ENV=invalid timeout 5 node server.js >/dev/null 2>&1; EC=$?
 check "fail-fast: NODE_ENV invalido aborta" "$EC" "1"
@@ -437,12 +474,17 @@ NODE_ENV=production CORS_ORIGINS='' timeout 5 node server.js >/dev/null 2>&1; EC
 check "fail-fast: produccion sin CORS_ORIGINS aborta" "$EC" "1"
 NODE_ENV=production CORS_ORIGINS='*' timeout 5 node server.js >/dev/null 2>&1; EC=$?
 check "fail-fast: produccion con comodin aborta" "$EC" "1"
+NODE_ENV=production CORS_ORIGINS='https://citypets.com' HOST=0.0.0.0 timeout 5 node server.js >/dev/null 2>&1; EC=$?
+check "fail-fast: produccion con HOST=0.0.0.0 aborta" "$EC" "1"
 # --- server real en producción (puerto 3100) ---
 NODE_ENV=production PORT=3100 CORS_ORIGINS='https://citypets.com,https://www.citypets.com' \
   node server.js > /tmp/citypets-prod.log 2>&1 &
 PROD_PID=$!
 sleep 2
 check "prod: health 200" "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3100/api/health)" "200"
+LISTEN=$(ss -ltn 2>/dev/null | grep ':3100' | head -1)
+case "$LISTEN" in *"127.0.0.1:3100"*) ok "prod escucha solo en 127.0.0.1" ;; *) ko "prod no está en loopback ($LISTEN)" ;; esac
+check "prod: trust proxy lee X-Forwarded-For" "$(curl -s -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:3100/api/health | json 'j.ip')" "203.0.113.9"
 check "prod: HSTS presente" "$(curl -s -D - -o /dev/null http://localhost:3100/api/health | grep -ci 'strict-transport-security')" "1"
 check "prod: localhost sin ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: http://localhost:5500' http://localhost:3100/api/health | grep -ci 'access-control-allow-origin')" "0"
 check "prod: dominio permitido con ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: https://citypets.com' http://localhost:3100/api/health | grep -ci 'access-control-allow-origin')" "1"
@@ -453,6 +495,7 @@ kill "$PROD_PID" 2>/dev/null; wait "$PROD_PID" 2>/dev/null
 check "dev: localhost con ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: http://localhost:5500' "$B/health" | grep -ci 'access-control-allow-origin')" "1"
 check "dev: sin HSTS" "$(curl -s -D - -o /dev/null "$B/health" | grep -ci 'strict-transport-security')" "0"
 check "dev: log muestra [development]" "$(grep -c '\[development\]' /tmp/citypets-integral-server.log)" "1"
+check "dev: ignora X-Forwarded-For forjado" "$(curl -s -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:3000/api/health | json 'j.ip')" "127.0.0.1"
 
 echo ""
 echo "===== G13. Fase 9.5B: almacenamiento de medios (/uploads) ====="
