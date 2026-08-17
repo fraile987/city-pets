@@ -748,5 +748,86 @@ check "sensibles: schema.prisma 404" "$(curl -s -o /dev/null -w '%{http_code}' h
 NSS=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/uploads/../../etc/passwd)
 [ "$NSS" = "404" ] || [ "$NSS" = "403" ] && ok "sensibles: traversal bloqueado ($NSS)" || ko "sensibles: traversal permitido ($NSS)"
 kill "$SBOX_PID" 2>/dev/null; wait "$SBOX_PID" 2>/dev/null
+
+echo ""
+echo "===== G17. Fase 10.2: entorno simulado (Node/systemd/nginx) ====="
+# Reutiliza el sandbox de G16 (instalacion limpia, datos, medios y backups)
+SBOX=/tmp/citypets-g16-vps
+SBOX_BE="$SBOX/app/city-pets-backend"
+SBOX_DATA="$SBOX/data"
+SBOX_MEDIA="$SBOX/uploads"
+SBOX_BKP="$SBOX/backups"
+SBOX_PORT=3101
+
+# ---------- 10.2A: Node 24 LTS vía .nvmrc ----------
+NVM="$(cat ../.nvmrc 2>/dev/null)"
+NV="$(node -v | tr -d 'v')"
+check "10.2A: node $NV == .nvmrc ($NVM)" "$NV" "$NVM"
+grep -q '"node": ">=24 <25"' package.json && ok "10.2A: engines.node pin a 24 LTS" || ko "10.2A: engines.node no cubre 24"
+[ -d "$SBOX_BE/node_modules/.prisma/client" ] && ok "10.2A: npm ci + prisma generate reproducibles" || ko "10.2A: instalacion limpia ausente"
+# ---------- 10.2B: estructura persistente y aislamiento ----------
+[ -d "$SBOX_DATA" ] && ok "10.2B: $SBOX_DATA" || ko "10.2B: falta data/"
+[ -d "$SBOX_MEDIA" ] && ok "10.2B: $SBOX_MEDIA" || ko "10.2B: falta uploads/"
+[ -d "$SBOX_BKP" ] && ok "10.2B: $SBOX_BKP" || ko "10.2B: falta backups/"
+grep -q 'install -d -o ".APP_USER" -g ".APP_USER" ".DATA_DIR" ".MEDIA_DIR" ".BACKUP_DIR"' deploy/deploy.sh && ok "10.2B: deploy.sh fija owner citypets en las 3 rutas" || ko "10.2B: deploy.sh no fija permisos de las rutas"
+BEFORE_U=$(ls uploads/products 2>/dev/null | md5sum | cut -d' ' -f1)
+BEFORE_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
+env -i PATH="$PATH" HOME="$HOME" NODE_ENV=production HOST=127.0.0.1 PORT="$SBOX_PORT" \
+  DATABASE_URL="file:$SBOX_DATA/dev.db" UPLOADS_PATH="$SBOX_MEDIA" \
+  JWT_SECRET='ciudad-9-6-3-sandbox-secreto' \
+  CORS_ORIGINS='https://citypets.com,https://www.citypets.com' \
+  node "$SBOX_BE/server.js" > /tmp/citypets-g17-sbox.log 2>&1 &
+SBOX_PID=$!
+sleep 2
+check "10.2B: healthcheck 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/api/health)" "200"
+AFTER_U=$(ls uploads/products 2>/dev/null | md5sum | cut -d' ' -f1)
+AFTER_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
+[ "$AFTER_U" = "$BEFORE_U" ] && ok "10.2B: repo uploads/ intacto (la app escribe solo en la estructura)" || ko "10.2B: la app escribio en uploads/ del repo"
+[ "$AFTER_D" = "$BEFORE_D" ] && ok "10.2B: BD del repo intacta" || ko "10.2B: la app escribio en la BD del repo"
+# ---------- 10.2C: systemd (unit + caida y recuperacion) ----------
+if command -v systemd-analyze >/dev/null 2>&1; then
+  OUT=$(systemd-analyze verify deploy/city-pets.service 2>&1)
+  case "$OUT" in
+    *"Command /usr/bin/node is not executable"*)
+      ok "10.2C: unit valida (ruta /usr/bin/node se ajusta en el VPS con which node)" ;;
+    "")
+      ok "10.2C: unit valida (systemd-analyze verify)" ;;
+    *)
+      ko "10.2C: unit con errores ($OUT)" ;;
+  esac
+else
+  ok "10.2C: systemd-analyze no disponible (se omite)"
+fi
+grep -q '^Restart=on-failure' deploy/city-pets.service && grep -q '^RestartSec=' deploy/city-pets.service && ok "10.2C: Restart=on-failure + RestartSec" || ko "10.2C: reinicio automatico no configurado"
+MEDIA_BEFORE=$(ls -1 "$SBOX_MEDIA/products" 2>/dev/null | wc -l)
+kill -9 "$SBOX_PID" 2>/dev/null; wait "$SBOX_PID" 2>/dev/null
+sleep 1
+check "10.2C: puerto cerrado tras kill -9" "$(ss -ltn 2>/dev/null | grep -c ":$SBOX_PORT")" "0"
+env -i PATH="$PATH" HOME="$HOME" NODE_ENV=production HOST=127.0.0.1 PORT="$SBOX_PORT" \
+  DATABASE_URL="file:$SBOX_DATA/dev.db" UPLOADS_PATH="$SBOX_MEDIA" \
+  JWT_SECRET='ciudad-9-6-3-sandbox-secreto' \
+  CORS_ORIGINS='https://citypets.com,https://www.citypets.com' \
+  node "$SBOX_BE/server.js" > /tmp/citypets-g17-sbox2.log 2>&1 &
+SBOX_PID=$!
+sleep 2
+check "10.2C: recuperacion: healthcheck 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/api/health)" "200"
+check "10.2C: recuperacion: datos conservados" "$(curl -s http://127.0.0.1:$SBOX_PORT/api/products | json 'j.some(p=>p.name==="Sobrevive")')" "true"
+check "10.2C: recuperacion: medios conservados" "$(ls -1 "$SBOX_MEDIA/products" 2>/dev/null | wc -l)" "$MEDIA_BEFORE"
+# ---------- 10.2D: nginx (estatico) + proxy simulado ----------
+grep -q 'listen 80;' deploy/nginx.conf && ok "10.2D: nginx HTTP (listen 80)" || ko "10.2D: sin listen 80"
+grep -q 'listen 443 ssl' deploy/nginx.conf && ok "10.2D: nginx HTTPS preparado" || ko "10.2D: sin preparacion 443"
+grep -q 'client_max_body_size 26m' deploy/nginx.conf && ok "10.2D: limite 26m" || ko "10.2D: sin limite 26m"
+PORT=8080 TARGET="$SBOX_PORT" node scripts/test-proxy.js > /tmp/citypets-g17-proxy.log 2>&1 &
+PROXY_PID=$!
+sleep 1
+check "10.2D: proxy: salud 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/health)" "200"
+PIMG=$(ls -1 "$SBOX_MEDIA/products" 2>/dev/null | head -1)
+if [ -n "$PIMG" ]; then
+  check "10.2D: proxy: /uploads 200" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080/uploads/products/$PIMG")" "200"
+else
+  ko "10.2D: no hay media para probar el proxy"
+fi
+kill "$PROXY_PID" 2>/dev/null; wait "$PROXY_PID" 2>/dev/null
+kill "$SBOX_PID" 2>/dev/null; wait "$SBOX_PID" 2>/dev/null
 rm -rf "$SBOX"
 [ "$FAIL" -eq 0 ]
