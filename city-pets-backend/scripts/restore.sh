@@ -11,7 +11,7 @@
 #   bash scripts/restore.sh <backup> --force         # sin confirmación
 #   bash scripts/restore.sh <backup> --no-safety     # sin snapshot previo
 #   DB_PATH=/var/lib/city-pets/data/dev.db UPLOADS_DIR=/var/lib/city-pets/uploads \
-#     bash scripts/restore.sh ...                    # rutas de producción (Fase 9.6)
+#     BACKUP_DIR=/var/lib/city-pets/backups bash scripts/restore.sh ...  # producción (Fase 9.6)
 #
 # NOTA: detén el server antes de restaurar; los pools de conexión de
 # Prisma guardan el archivo antiguo en memoria.
@@ -19,7 +19,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-BACKUP_DIR="backups"
+BACKUP_DIR="${BACKUP_DIR:-backups}"
 DB="${DB_PATH:-prisma/dev.db}"
 UPLOADS_DIR="${UPLOADS_DIR:-uploads}"
 FORCE="0"

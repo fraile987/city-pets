@@ -645,4 +645,108 @@ check "proxy: subida >1MB atraviesa el proxy (201)" "$(code_of "$UP")" "201"
 PIMG=$(body_of "$UP" | json 'j.url')
 check "proxy: /uploads servido (200)" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080$PIMG")" "200"
 kill "$PROXY_PID" 2>/dev/null; wait "$PROXY_PID" 2>/dev/null
+
+echo ""
+echo "===== G16. Fase 9.6.3: auditoria final y simulacion de VPS limpio ====="
+# ---------- Auditoria estatica: los artefactos nunca destruyen datos ----------
+if grep -qE '^\s*rm\b|prisma migrate reset|db push|DROP TABLE' deploy/deploy.sh; then
+  ko "deploy.sh contiene operaciones destructivas"
+else
+  ok "deploy.sh no destruye datos (sin rm/reset/db push/DROP)"
+fi
+L1=$(grep -n '^npm ci' deploy/deploy.sh | cut -d: -f1 | head -1)
+L2=$(grep -n 'install -d' deploy/deploy.sh | cut -d: -f1 | head -1)
+L3=$(grep -n 'prisma migrate deploy' deploy/deploy.sh | cut -d: -f1 | head -1)
+if [ -n "$L1" ] && [ -n "$L2" ] && [ -n "$L3" ] && [ "$L1" -lt "$L2" ] && [ "$L2" -lt "$L3" ]; then
+  ok "deploy.sh orden: npm ci -> dirs -> migrate deploy"
+else
+  ko "deploy.sh orden incorrecto (npm=$L1 dirs=$L2 migrate=$L3)"
+fi
+grep -q 'chmod 600 .env' deploy/deploy.sh && grep -q 'chown' deploy/deploy.sh && ok "deploy.sh protege .env (chown + chmod 600)" || ko "deploy.sh no protege .env"
+if grep -qE '^\s*(npx )?prisma generate' deploy/deploy.sh; then
+  ko "deploy.sh duplica prisma generate (postinstall ya lo hace)"
+else
+  ok "deploy.sh no duplica prisma generate"
+fi
+grep -q 'BACKUP_DIR="${BACKUP_DIR:-backups}"' scripts/backup.sh && ok "backup.sh: BACKUP_DIR configurable" || ko "backup.sh sin BACKUP_DIR env"
+grep -q 'BACKUP_DIR="${BACKUP_DIR:-backups}"' scripts/restore.sh && ok "restore.sh: BACKUP_DIR configurable" || ko "restore.sh sin BACKUP_DIR env"
+if grep -q 'listen 3000\|proxy_pass http://0.0.0.0:3000' deploy/nginx.conf; then
+  ko "nginx expone el backend"
+else
+  ok "nginx no expone :3000 (solo loopback)"
+fi
+grep -q '/var/lib/city-pets/data /var/lib/city-pets/uploads /var/lib/city-pets/backups' deploy/city-pets.service && ok "systemd: BD/uploads/backups escribibles" || ko "systemd: ReadWritePaths incompleto"
+# ---------- Simulacion de VPS limpio ----------
+SBOX=/tmp/citypets-g16-vps
+SBOX_BE="$SBOX/app/city-pets-backend"
+SBOX_DATA="$SBOX/data"
+SBOX_MEDIA="$SBOX/uploads"
+SBOX_BKP="$SBOX/backups"
+SBOX_PORT=3101
+rm -rf "$SBOX"
+mkdir -p "$SBOX_BE"
+tar -C . --exclude='node_modules' --exclude='prisma/dev.db*' --exclude='uploads' --exclude='backups' --exclude='.env' -cf - . | tar -xf - -C "$SBOX_BE"
+printf 'NODE_ENV=production\nPORT=%s\nHOST=127.0.0.1\nDATABASE_URL=file:%s/dev.db\nUPLOADS_PATH=%s\nJWT_SECRET=ciudad-9-6-3-sandbox-secreto\nCORS_ORIGINS=https://citypets.com,https://www.citypets.com\n' "$SBOX_PORT" "$SBOX_DATA" "$SBOX_MEDIA" > "$SBOX_BE/.env"
+[ -f "$SBOX_BE/.env" ] && ok "VPS simulado: .env de produccion creado" || ko "VPS simulado: no se pudo crear .env"
+(cd "$SBOX_BE" && npm ci --loglevel=error >/dev/null 2>&1)
+[ -f "$SBOX_BE/node_modules/.prisma/client/index.js" ] && ok "VPS limpio: npm ci + postinstall prisma generate" || ko "VPS limpio: npm ci fallo"
+install -d "$SBOX_DATA" "$SBOX_MEDIA" "$SBOX_BKP"
+(cd "$SBOX_BE" && npx prisma migrate deploy >/dev/null 2>&1)
+[ -f "$SBOX_DATA/dev.db" ] && ok "VPS limpio: migraciones crean BD en el volumen" || ko "VPS limpio: dev.db ausente en DATA_DIR"
+env -i PATH="$PATH" HOME="$HOME" NODE_ENV=production HOST=127.0.0.1 PORT="$SBOX_PORT" \
+  DATABASE_URL="file:$SBOX_DATA/dev.db" UPLOADS_PATH="$SBOX_MEDIA" \
+  JWT_SECRET='ciudad-9-6-3-sandbox-secreto' \
+  CORS_ORIGINS='https://citypets.com,https://www.citypets.com' \
+  node "$SBOX_BE/server.js" > /tmp/citypets-g16-sbox.log 2>&1 &
+SBOX_PID=$!
+sleep 2
+check "VPS limpio: healthcheck 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/api/health)" "200"
+check "VPS limpio: body status ok" "$(curl -s http://127.0.0.1:$SBOX_PORT/api/health | json 'j.status')" "ok"
+LISTEN=$(ss -ltn 2>/dev/null | grep ":$SBOX_PORT" | head -1)
+case "$LISTEN" in *"127.0.0.1:$SBOX_PORT"*) ok "produccion escucha solo en 127.0.0.1" ;; *) ko "produccion no esta en loopback ($LISTEN)" ;; esac
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$SBOX_PORT/api/auth/register" -H 'Content-Type: application/json' -d '{"name":"VPS Admin","phone":"3005550888","email":"g16vps@test.co","password":"clave123"}')
+TVPS=$(body_of "$R" | json 'j.token')
+(cd "$SBOX_BE" && npm run promote -- g16vps@test.co >/dev/null 2>&1)
+[ "${TVPS:0:4}" = "eyJh" ] && ok "VPS simulado: admin creado y promovido" || ko "VPS simulado: admin fallo"
+R=$(curl -s -w '|%{http_code}' -X POST "http://127.0.0.1:$SBOX_PORT/api/products" -H "Authorization: Bearer $TVPS" -H 'Content-Type: application/json' -d '{"name":"Sobrevive","species":"Perros","price":7500}')
+check "VPS simulado: producto creado" "$(code_of "$R")" "201"
+node scripts/gen-test-png.js /tmp/cp-g16-media.png >/dev/null
+UP=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TVPS" -F 'file=@/tmp/cp-g16-media.png' "http://127.0.0.1:$SBOX_PORT/api/upload/image")
+check "VPS simulado: media subido" "$(code_of "$UP")" "201"
+[ -n "$(ls -A "$SBOX_MEDIA/products" 2>/dev/null)" ] && ok "VPS simulado: archivo en el volumen de medios" || ko "VPS simulado: sin archivo en MEDIA_DIR"
+DB_PATH="$SBOX_DATA/dev.db" UPLOADS_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" bash "$SBOX_BE/scripts/backup.sh" >/dev/null 2>&1
+BKP=$(ls -1t "$SBOX_BKP"/citypets-*.tar.gz 2>/dev/null | head -1)
+[ -n "$BKP" ] && ok "VPS simulado: backup creado en el volumen" || ko "VPS simulado: backup ausente"
+# ---------- Redeploy: repetir el flujo; los datos deben sobrevivir ----------
+kill "$SBOX_PID" 2>/dev/null; wait "$SBOX_PID" 2>/dev/null
+(cd "$SBOX_BE" && npm ci --loglevel=error >/dev/null 2>&1) && ok "redeploy: npm ci idempotente" || ko "redeploy: npm ci fallo"
+install -d "$SBOX_DATA" "$SBOX_MEDIA" "$SBOX_BKP"
+(cd "$SBOX_BE" && npx prisma migrate deploy >/dev/null 2>&1) && ok "redeploy: migraciones idempotentes" || ko "redeploy: migrate fallo"
+env -i PATH="$PATH" HOME="$HOME" NODE_ENV=production HOST=127.0.0.1 PORT="$SBOX_PORT" \
+  DATABASE_URL="file:$SBOX_DATA/dev.db" UPLOADS_PATH="$SBOX_MEDIA" \
+  JWT_SECRET='ciudad-9-6-3-sandbox-secreto' \
+  CORS_ORIGINS='https://citypets.com,https://www.citypets.com' \
+  node "$SBOX_BE/server.js" > /tmp/citypets-g16-sbox2.log 2>&1 &
+SBOX_PID=$!
+sleep 2
+check "redeploy: healthcheck 200" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/api/health)" "200"
+check "redeploy: SQLite conserva datos" "$(curl -s http://127.0.0.1:$SBOX_PORT/api/products | json 'j.some(p=>p.name==="Sobrevive")')" "true"
+[ -n "$(ls -A "$SBOX_MEDIA/products" 2>/dev/null)" ] && ok "redeploy: uploads sobreviven" || ko "redeploy: uploads perdidos"
+[ -f "$BKP" ] && ok "redeploy: backup sobrevive" || ko "redeploy: backup perdido"
+# ---------- Produccion en runtime (VPS simulado) ----------
+check "prod: trust proxy lee X-Forwarded-For" "$(curl -s -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:$SBOX_PORT/api/health | json 'j.ip')" "203.0.113.9"
+check "prod: HSTS presente" "$(curl -s -D - -o /dev/null http://127.0.0.1:$SBOX_PORT/api/health | grep -ci 'strict-transport-security')" "1"
+HSTS=$(curl -s -D - -o /dev/null http://127.0.0.1:$SBOX_PORT/api/health | grep -i 'strict-transport-security' | head -1)
+case "$HSTS" in *"max-age=15552000"*"includeSubDomains"*) ok "prod: HSTS max-age=15552000 includeSubDomains" ;; *) ko "prod: HSTS incompleto ($HSTS)" ;; esac
+(cd "$SBOX_BE" && env -i PATH="$PATH" HOME="$HOME" PORT=3199 NODE_ENV=production CORS_ORIGINS='' timeout 5 node server.js >/dev/null 2>&1; echo $?) > /tmp/citypets-g16-failfast.exit
+check "prod: exige CORS_ORIGINS (fail-fast)" "$(cat /tmp/citypets-g16-failfast.exit)" "1"
+# no expone la BD ni archivos sensibles
+check "sensibles: .env 404" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/city-pets-backend/.env)" "404"
+check "sensibles: .git 404" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/.git/HEAD)" "404"
+check "sensibles: dev.db 404" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/dev.db)" "404"
+check "sensibles: schema.prisma 404" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/city-pets-backend/prisma/schema.prisma)" "404"
+NSS=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$SBOX_PORT/uploads/../../etc/passwd)
+[ "$NSS" = "404" ] || [ "$NSS" = "403" ] && ok "sensibles: traversal bloqueado ($NSS)" || ko "sensibles: traversal permitido ($NSS)"
+kill "$SBOX_PID" 2>/dev/null; wait "$SBOX_PID" 2>/dev/null
+rm -rf "$SBOX"
 [ "$FAIL" -eq 0 ]

@@ -9,7 +9,7 @@
 #   bash scripts/backup.sh
 #   BACKUP_KEEP=3 bash scripts/backup.sh   # retención distinta
 #   DB_PATH=/var/lib/city-pets/data/dev.db UPLOADS_DIR=/var/lib/city-pets/uploads \
-#     bash scripts/backup.sh               # rutas de producción (Fase 9.6)
+#     BACKUP_DIR=/var/lib/city-pets/backups bash scripts/backup.sh   # producción (Fase 9.6)
 #
 # Nota producción: para un snapshot 100% consistente de SQLite usa el
 # CLI (sqlite3 dev.db ".backup ...") si está disponible; aquí se copia
@@ -18,7 +18,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-BACKUP_DIR="backups"
+BACKUP_DIR="${BACKUP_DIR:-backups}"
 KEEP="${BACKUP_KEEP:-7}"
 STAMP="$(date +%Y%m%d-%H%M%S)-$$"
 OUT="$BACKUP_DIR/citypets-$STAMP.tar.gz"
