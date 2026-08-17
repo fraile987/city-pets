@@ -67,7 +67,7 @@ h1, h2, h3, h4 { color: var(--navy-800); line-height: 1.2; }
 }
 .navbar-inner { display: flex; align-items: center; gap: 16px; height: 68px; }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--white); font-weight: 800; font-size: 1.25rem; }
-.brand img { height: 44px; width: 44px; border-radius: 10px; }
+.brand img { height: 56px; width: auto; }
 .brand small { display: block; font-size: .62rem; letter-spacing: 3px; color: var(--gold-400); font-weight: 600; margin-top: -3px; }
 .nav-links { display: flex; gap: 4px; margin-left: auto; align-items: center; }
 .nav-links a {
@@ -338,6 +338,7 @@ tr:hover td { background: var(--cloud); }
   .split-panel { min-height: 46vh; }
   .hero-split.maximized { grid-template-rows: 1fr; }
   .nav-links { display: none; }
+  .brand img { height: 44px; width: auto; }
   .panel-content { padding: 30px 24px; }
   .section { padding: 44px 0; }
   .drawer-panel { width: 100%; }
