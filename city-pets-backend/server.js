@@ -8,6 +8,16 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 
+/* ---------- Entorno (Fase 9.5A) ----------
+   Desarrollo por defecto. Solo se permiten development/production;
+   cualquier otro valor aborta el arranque para no mezclar configuraciones. */
+const NODE_ENV = process.env.NODE_ENV || 'development';
+if (!['development', 'production'].includes(NODE_ENV)) {
+  console.error(`[FATAL] NODE_ENV inválido: "${NODE_ENV}". Usa 'development' o 'production'.`);
+  process.exit(1);
+}
+const IS_PROD = NODE_ENV === 'production';
+
 /* ---------- Guard de arranque (fail fast) ---------- */
 const JWT_SECRET = process.env.JWT_SECRET || '';
 if (!JWT_SECRET || JWT_SECRET === 'cambia-esto-por-un-secreto-seguro' || JWT_SECRET.length < 16) {
@@ -44,7 +54,9 @@ app.use(helmet({
       'frame-ancestors': ["'self'"]
     }
   },
-  strictTransportSecurity: false,
+  strictTransportSecurity: IS_PROD
+    ? { maxAge: 15552000, includeSubDomains: true }
+    : false,
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   crossOriginResourcePolicy: { policy: 'same-origin' }
 }));
@@ -56,17 +68,28 @@ app.use((req, res, next) => {
 });
 
 /* ---------- Middlewares ---------- */
-/* CORS restringido: mismo origen, localhost/127.0.0.1 en desarrollo,
-   o la lista CORS_ORIGINS (separada por comas) si está definida. */
+/* CORS separado por entorno (Fase 9.5A):
+   - Desarrollo: localhost/127.0.0.1 + CORS_ORIGINS.
+   - Producción: SOLO CORS_ORIGINS (lista exacta, sin "*").
+     Sin CORS_ORIGINS en producción, el arranque aborta: así una mala
+     configuración no convierte producción en modo desarrollo. */
 const DEV_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const configuredOrigins = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 
+if (configuredOrigins.includes('*')) {
+  console.error('[FATAL] CORS_ORIGINS no admite "*": enumera los orígenes exactos (p. ej. https://citypets.com).');
+  process.exit(1);
+}
+if (IS_PROD && !configuredOrigins.length) {
+  console.error('[FATAL] Producción sin CORS_ORIGINS: define la lista de orígenes permitidos en .env');
+  process.exit(1);
+}
+
 app.use(cors({
   origin(origin, cb) {
-    if (!origin || (configuredOrigins.length ? configuredOrigins.includes(origin) : DEV_ORIGIN_RE.test(origin))) {
-      return cb(null, true);
-    }
-    return cb(null, false);
+    if (!origin) return cb(null, true);
+    if (IS_PROD) return cb(null, configuredOrigins.includes(origin));
+    return cb(null, DEV_ORIGIN_RE.test(origin) || configuredOrigins.includes(origin));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -109,5 +132,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`City Pets API escuchando en http://localhost:${PORT}`);
+  console.log(`City Pets API [${NODE_ENV}] escuchando en http://localhost:${PORT}`);
 });

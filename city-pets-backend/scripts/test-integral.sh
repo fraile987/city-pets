@@ -401,3 +401,55 @@ check "js/app.js servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/js/ap
 check "js/admin.js servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/js/admin.js")" "200"
 check "assets/logo.svg servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/assets/logo.svg")" "200"
 check "assets/hero-dog.svg servido" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/assets/hero-dog.svg")" "200"
+
+echo ""
+echo "===== G12. Fase 9.5A: separación desarrollo / producción ====="
+# --- config estática ---
+if grep -q "process.env.NODE_ENV || 'development'" server.js; then
+  ok "NODE_ENV por defecto development"
+else
+  ko "NODE_ENV default no configurado"
+fi
+if grep -q "'development', 'production'" server.js; then
+  ok "solo development/production aceptados"
+else
+  ko "validacion de NODE_ENV ausente"
+fi
+if grep -q "includes('\*')" server.js; then
+  ok "CORS_ORIGINS rechaza comodin *"
+else
+  ko "comodin no rechazado"
+fi
+if grep -q "IS_PROD) return cb(null, configuredOrigins.includes(origin))" server.js; then
+  ok "produccion: solo CORS_ORIGINS"
+else
+  ko "produccion no restringe CORS a CORS_ORIGINS"
+fi
+if grep -q '^NODE_ENV' .env.example && grep -q '^PORT' .env.example; then
+  ok ".env.example documenta NODE_ENV y PORT"
+else
+  ko ".env.example incompleto"
+fi
+# --- fail-fast: arranques inválidos deben abortar (exit != 0) ---
+NODE_ENV=invalid timeout 5 node server.js >/dev/null 2>&1; EC=$?
+check "fail-fast: NODE_ENV invalido aborta" "$EC" "1"
+NODE_ENV=production CORS_ORIGINS='' timeout 5 node server.js >/dev/null 2>&1; EC=$?
+check "fail-fast: produccion sin CORS_ORIGINS aborta" "$EC" "1"
+NODE_ENV=production CORS_ORIGINS='*' timeout 5 node server.js >/dev/null 2>&1; EC=$?
+check "fail-fast: produccion con comodin aborta" "$EC" "1"
+# --- server real en producción (puerto 3100) ---
+NODE_ENV=production PORT=3100 CORS_ORIGINS='https://citypets.com,https://www.citypets.com' \
+  node server.js > /tmp/citypets-prod.log 2>&1 &
+PROD_PID=$!
+sleep 2
+check "prod: health 200" "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3100/api/health)" "200"
+check "prod: HSTS presente" "$(curl -s -D - -o /dev/null http://localhost:3100/api/health | grep -ci 'strict-transport-security')" "1"
+check "prod: localhost sin ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: http://localhost:5500' http://localhost:3100/api/health | grep -ci 'access-control-allow-origin')" "0"
+check "prod: dominio permitido con ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: https://citypets.com' http://localhost:3100/api/health | grep -ci 'access-control-allow-origin')" "1"
+check "prod: origen externo sin ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: https://evil.example.com' http://localhost:3100/api/health | grep -ci 'access-control-allow-origin')" "0"
+check "prod: log muestra [production]" "$(grep -c '\[production\]' /tmp/citypets-prod.log)" "1"
+kill "$PROD_PID" 2>/dev/null; wait "$PROD_PID" 2>/dev/null
+# --- dev (server principal en :3000) ---
+check "dev: localhost con ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: http://localhost:5500' "$B/health" | grep -ci 'access-control-allow-origin')" "1"
+check "dev: sin HSTS" "$(curl -s -D - -o /dev/null "$B/health" | grep -ci 'strict-transport-security')" "0"
+check "dev: log muestra [development]" "$(grep -c '\[development\]' /tmp/citypets-integral-server.log)" "1"
