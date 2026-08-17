@@ -5,6 +5,7 @@
    ========================================================= */
 
 const prisma = require('../db');
+const { MAX } = require('../constants');
 
 /* Número a Float, o NaN si no es numérico. */
 function toFloat(v) {
@@ -33,12 +34,18 @@ async function createPet(req, res) {
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'El nombre es obligatorio' });
   }
+  if (name.trim().length > MAX.name) {
+    return res.status(400).json({ error: `El nombre no puede superar ${MAX.name} caracteres` });
+  }
   if (!species || typeof species !== 'string' || !species.trim()) {
     return res.status(400).json({ error: 'La especie es obligatoria' });
   }
+  if (species.trim().length > MAX.species) {
+    return res.status(400).json({ error: `La especie no puede superar ${MAX.species} caracteres` });
+  }
   const ageNum = toFloat(age);
-  if (isNaN(ageNum)) {
-    return res.status(400).json({ error: 'La edad debe ser un número' });
+  if (isNaN(ageNum) || ageNum < 0 || ageNum > 100) {
+    return res.status(400).json({ error: 'La edad debe ser un número entre 0 y 100' });
   }
   const rationNum = toFloat(ration);
   const weightNum = toFloat(weight);
@@ -47,10 +54,10 @@ async function createPet(req, res) {
     data: {
       name: name.trim(),
       species: species.trim(),
-      breed: typeof breed === 'string' ? breed : '',
+      breed: typeof breed === 'string' ? breed.slice(0, MAX.breed) : '',
       age: ageNum,
-      ration: isNaN(rationNum) ? 0 : rationNum,
-      weight: isNaN(weightNum) ? null : weightNum,
+      ration: isNaN(rationNum) || rationNum < 0 ? 0 : Math.min(rationNum, 100000),
+      weight: isNaN(weightNum) || weightNum < 0 ? null : Math.min(weightNum, 10000),
       userId: req.user.id
     }
   });
@@ -73,32 +80,38 @@ async function updatePet(req, res) {
     if (typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'El nombre no es válido' });
     }
+    if (name.trim().length > MAX.name) {
+      return res.status(400).json({ error: `El nombre no puede superar ${MAX.name} caracteres` });
+    }
     data.name = name.trim();
   }
   if (species !== undefined) {
     if (typeof species !== 'string' || !species.trim()) {
       return res.status(400).json({ error: 'La especie no es válida' });
     }
+    if (species.trim().length > MAX.species) {
+      return res.status(400).json({ error: `La especie no puede superar ${MAX.species} caracteres` });
+    }
     data.species = species.trim();
   }
-  if (breed !== undefined) data.breed = typeof breed === 'string' ? breed : '';
+  if (breed !== undefined) data.breed = typeof breed === 'string' ? breed.slice(0, MAX.breed) : '';
   if (age !== undefined) {
     const ageNum = toFloat(age);
-    if (isNaN(ageNum)) {
-      return res.status(400).json({ error: 'La edad debe ser un número' });
+    if (isNaN(ageNum) || ageNum < 0 || ageNum > 100) {
+      return res.status(400).json({ error: 'La edad debe ser un número entre 0 y 100' });
     }
     data.age = ageNum;
   }
   if (ration !== undefined) {
     const rationNum = toFloat(ration);
-    if (isNaN(rationNum)) {
-      return res.status(400).json({ error: 'La ración debe ser un número' });
+    if (isNaN(rationNum) || rationNum < 0) {
+      return res.status(400).json({ error: 'La ración debe ser un número no negativo' });
     }
-    data.ration = rationNum;
+    data.ration = Math.min(rationNum, 100000);
   }
   if (weight !== undefined) {
     const weightNum = toFloat(weight);
-    data.weight = isNaN(weightNum) ? null : weightNum;
+    data.weight = isNaN(weightNum) || weightNum < 0 ? null : Math.min(weightNum, 10000);
   }
 
   const pet = await prisma.pet.update({ where: { id: existing.id }, data });

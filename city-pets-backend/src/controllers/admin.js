@@ -4,9 +4,8 @@
    ========================================================= */
 
 const prisma = require('../db');
+const { ORDER_STATUSES } = require('../constants');
 const { serializeOrder } = require('./orders');
-
-const ORDER_STATUSES = ['pendiente', 'entregado', 'incidente'];
 
 async function listAllOrders(req, res) {
   const orders = await prisma.order.findMany({

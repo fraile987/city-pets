@@ -3,6 +3,7 @@
    ========================================================= */
 
 const prisma = require('../db');
+const { MAX } = require('../constants');
 
 /* En la BD, tags e images se guardan serializados a JSON (String).
    Aquí se restauran a su forma original de array. */
@@ -48,30 +49,50 @@ function toJsonArray(v, fallback = []) {
   return Array.isArray(v) ? JSON.stringify(v) : JSON.stringify(fallback);
 }
 
-async function createProduct(req, res) {
-  const { name, species, category } = req.body;
+/* Corta un string a la longitud máxima permitida. */
+function cap(v, max) {
+  return typeof v === 'string' ? v.trim().slice(0, max) : '';
+}
+
+function validateProductFields(body) {
+  const { name, species, category } = body;
   if (!name || typeof name !== 'string' || !name.trim()) {
-    return res.status(400).json({ error: 'El nombre es obligatorio' });
+    return 'El nombre es obligatorio';
+  }
+  if (name.trim().length > MAX.name) {
+    return `El nombre no puede superar ${MAX.name} caracteres`;
   }
   if (!species || typeof species !== 'string' || !species.trim()) {
-    return res.status(400).json({ error: 'La especie es obligatoria' });
+    return 'La especie es obligatoria';
   }
+  if (species.trim().length > MAX.species) {
+    return `La especie no puede superar ${MAX.species} caracteres`;
+  }
+  if (category !== undefined && typeof category === 'string' && category.trim().length > MAX.category) {
+    return `La categoría no puede superar ${MAX.category} caracteres`;
+  }
+  return null;
+}
+
+async function createProduct(req, res) {
+  const err = validateProductFields(req.body);
+  if (err) return res.status(400).json({ error: err });
 
   const product = await prisma.product.create({
     data: {
-      name: name.trim(),
-      species: species.trim(),
-      category: typeof category === 'string' && category.trim() ? category.trim() : 'General',
-      price: toNonNegInt(req.body.price),
-      unit: typeof req.body.unit === 'string' && req.body.unit.trim() ? req.body.unit.trim() : '1 und',
-      grams: toNonNegInt(req.body.grams),
-      stock: toNonNegInt(req.body.stock),
-      desc: typeof req.body.desc === 'string' ? req.body.desc : '',
-      dailyRation: toNonNegInt(req.body.dailyRation),
+      name: req.body.name.trim(),
+      species: req.body.species.trim(),
+      category: cap(req.body.category, MAX.category) || 'General',
+      price: Math.min(toNonNegInt(req.body.price), 100000000),
+      unit: cap(req.body.unit, MAX.unit) || '1 und',
+      grams: Math.min(toNonNegInt(req.body.grams), 1000000),
+      stock: Math.min(toNonNegInt(req.body.stock), 1000000),
+      desc: cap(req.body.desc, MAX.desc),
+      dailyRation: Math.min(toNonNegInt(req.body.dailyRation), 100000),
       tags: toJsonArray(req.body.tags),
       images: toJsonArray(req.body.images),
-      video: typeof req.body.video === 'string' ? req.body.video : '',
-      rating: isNaN(parseFloat(req.body.rating)) ? 4.0 : parseFloat(req.body.rating)
+      video: typeof req.body.video === 'string' ? req.body.video.slice(0, 1000) : '',
+      rating: isNaN(parseFloat(req.body.rating)) ? 4.0 : Math.min(Math.max(parseFloat(req.body.rating), 0), 5)
     }
   });
 
@@ -95,25 +116,31 @@ async function updateProduct(req, res) {
     if (typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'El nombre no es válido' });
     }
+    if (name.trim().length > MAX.name) {
+      return res.status(400).json({ error: `El nombre no puede superar ${MAX.name} caracteres` });
+    }
     data.name = name.trim();
   }
   if (species !== undefined) {
     if (typeof species !== 'string' || !species.trim()) {
       return res.status(400).json({ error: 'La especie no es válida' });
     }
+    if (species.trim().length > MAX.species) {
+      return res.status(400).json({ error: `La especie no puede superar ${MAX.species} caracteres` });
+    }
     data.species = species.trim();
   }
-  if (category !== undefined) data.category = typeof category === 'string' ? category.trim() : '';
-  if (price !== undefined) data.price = toNonNegInt(price);
-  if (unit !== undefined) data.unit = typeof unit === 'string' ? unit.trim() : '';
-  if (grams !== undefined) data.grams = toNonNegInt(grams);
-  if (stock !== undefined) data.stock = toNonNegInt(stock);
-  if (desc !== undefined) data.desc = typeof desc === 'string' ? desc : '';
-  if (dailyRation !== undefined) data.dailyRation = toNonNegInt(dailyRation);
+  if (category !== undefined) data.category = cap(category, MAX.category);
+  if (price !== undefined) data.price = Math.min(toNonNegInt(price), 100000000);
+  if (unit !== undefined) data.unit = cap(unit, MAX.unit);
+  if (grams !== undefined) data.grams = Math.min(toNonNegInt(grams), 1000000);
+  if (stock !== undefined) data.stock = Math.min(toNonNegInt(stock), 1000000);
+  if (desc !== undefined) data.desc = cap(desc, MAX.desc);
+  if (dailyRation !== undefined) data.dailyRation = Math.min(toNonNegInt(dailyRation), 100000);
   if (tags !== undefined) data.tags = toJsonArray(tags);
   if (images !== undefined) data.images = toJsonArray(images);
-  if (video !== undefined) data.video = typeof video === 'string' ? video : '';
-  if (rating !== undefined) data.rating = isNaN(parseFloat(rating)) ? 4.0 : parseFloat(rating);
+  if (video !== undefined) data.video = typeof video === 'string' ? video.slice(0, 1000) : '';
+  if (rating !== undefined) data.rating = isNaN(parseFloat(rating)) ? 4.0 : Math.min(Math.max(parseFloat(rating), 0), 5);
 
   const product = await prisma.product.update({ where: { id: existing.id }, data });
   res.json({

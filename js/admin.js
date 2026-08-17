@@ -152,7 +152,7 @@
     $('#attributionBars').innerHTML = attr.length ? attr.map(a => `
       <div class="mb-3">
         <div class="row" style="justify-content:space-between;font-size:.85rem">
-          <strong>${a.channel}</strong><span>${a.count} usuario${a.count === 1 ? '' : 's'}</span>
+          <strong>${esc(a.channel)}</strong><span>${a.count} usuario${a.count === 1 ? '' : 's'}</span>
         </div>
         <div style="height:12px;background:var(--gray-100);border-radius:8px;overflow:hidden">
           <div style="width:${(a.count / max * 100).toFixed(0)}%;height:100%;background:linear-gradient(90deg,var(--gold-400),var(--gold-600));border-radius:8px"></div>
@@ -163,8 +163,8 @@
     $('#recentOrders').innerHTML = orders.length ? orders.slice(0, 4).map(o => `
       <div class="row" style="justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px dashed var(--gray-100)">
         <div>
-          <strong style="font-size:.88rem">${o.id}</strong>
-          <div class="muted" style="font-size:.78rem">${o.userName} · ${fmtMoney(o.total)}</div>
+          <strong style="font-size:.88rem">${esc(o.id)}</strong>
+          <div class="muted" style="font-size:.78rem">${esc(o.userName)} · ${fmtMoney(o.total)}</div>
         </div>
         <span class="badge ${o.status === 'entregado' ? 'badge-green' : o.status === 'incidente' ? 'badge-red' : 'badge-gold'}">${o.status === 'entregado' ? 'Entregado' : o.status === 'incidente' ? 'Incidente' : 'Pendiente'}</span>
       </div>`).join('') : '<p class="muted">Sin pedidos aún.</p>';
@@ -216,9 +216,9 @@
   function renderProductsTable() {
     $('#adminProducts').innerHTML = productsCache.map(p => `
       <tr>
-        <td><img src="${p.images[0]}" style="width:52px;height:44px;object-fit:cover;border-radius:6px" /></td>
-        <td><strong>${p.name}</strong><br/><span class="muted" style="font-size:.78rem">${p.category} · ${p.unit}</span></td>
-        <td>${p.species}</td>
+        <td><img src="${esc(p.images[0])}" style="width:52px;height:44px;object-fit:cover;border-radius:6px" /></td>
+        <td><strong>${esc(p.name)}</strong><br/><span class="muted" style="font-size:.78rem">${esc(p.category)} · ${esc(p.unit)}</span></td>
+        <td>${esc(p.species)}</td>
         <td class="money">${fmtMoney(p.price)}</td>
         <td><span class="badge ${p.stock <= 10 ? 'badge-red' : p.stock <= 25 ? 'badge-gold' : 'badge-green'}">${p.stock}</span></td>
         <td>${p.video ? '📹 + 🖼' : '🖼'}</td>
@@ -412,10 +412,10 @@
     const orders = ordersCache;
     $('#adminOrders').innerHTML = orders.map(o => `
       <tr>
-        <td><strong>${o.id}</strong><br/><span class="muted" style="font-size:.75rem">${new Date(o.createdAt).toLocaleString('es-CO')}</span></td>
-        <td>${o.userName}<br/><span class="muted" style="font-size:.75rem">📱 ${o.phone}</span></td>
+        <td><strong>${esc(o.id)}</strong><br/><span class="muted" style="font-size:.75rem">${new Date(o.createdAt).toLocaleString('es-CO')}</span></td>
+        <td>${esc(o.userName)}<br/><span class="muted" style="font-size:.75rem">📱 ${esc(o.phone)}</span></td>
         <td class="money">${fmtMoney(o.total)}</td>
-        <td>${o.deliveryLabel}<br/><span class="muted" style="font-size:.75rem">Franja ${o.deliverySlot === 'manana' ? '🌅' : '🌇'}</span></td>
+        <td>${esc(o.deliveryLabel)}<br/><span class="muted" style="font-size:.75rem">Franja ${o.deliverySlot === 'manana' ? '🌅' : '🌇'}</span></td>
         <td>${o.payment.method === 'efectivo' ? '💵 Efectivo' : '📲 Digital'}</td>
         <td><span class="badge ${o.status === 'entregado' ? 'badge-green' : o.status === 'incidente' ? 'badge-red' : 'badge-gold'}">${o.status === 'entregado' ? 'Entregado' : o.status === 'incidente' ? 'Incidente' : 'Pendiente'}</span></td>
         <td>
@@ -444,11 +444,11 @@
     const incidents = ordersCache.filter(o => o.status === 'incidente');
     $('#adminIncidents').innerHTML = incidents.map(o => `
       <tr>
-        <td><strong>${o.id}</strong></td>
-        <td>${o.userName}</td>
-        <td>${o.phone}</td>
+        <td><strong>${esc(o.id)}</strong></td>
+        <td>${esc(o.userName)}</td>
+        <td>${esc(o.phone)}</td>
         <td>${new Date(o.createdAt).toLocaleString('es-CO')}</td>
-        <td>No se cumplió con la entrega programada (${o.deliveryLabel}).</td>
+        <td>No se cumplió con la entrega programada (${esc(o.deliveryLabel)}).</td>
         <td><button class="btn btn-navy btn-sm" data-iresolve="${o.id}">Resolver</button></td>
       </tr>`).join('') || '<tr><td colspan="6" class="ta-center muted">No hay incidencias registradas. ✔</td></tr>';
   }
@@ -462,7 +462,7 @@
         <thead><tr><th>Canal</th><th>Usuarios</th><th>%</th></tr></thead>
         <tbody>${attr.map(a => `
           <tr>
-            <td>${a.channel}</td>
+            <td>${esc(a.channel)}</td>
             <td>${a.count}</td>
             <td>${total ? (a.count / total * 100).toFixed(1) : 0}%</td>
           </tr>`).join('')}
@@ -472,8 +472,8 @@
     const det = attributionCache ? attributionCache.detail.slice(0, 12) : [];
     $('#attributionDetail').innerHTML = det.length ? det.map(a => `
       <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--gray-100);font-size:.88rem">
-        <span>${a.userName}</span>
-        <span class="badge badge-gold">${a.channel}</span>
+        <span>${esc(a.userName)}</span>
+        <span class="badge badge-gold">${esc(a.channel)}</span>
       </div>`).join('') : '<p class="muted">Sin registros de atribución.</p>';
   }
 

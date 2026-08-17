@@ -5,6 +5,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../db');
+const { CHANNELS, MAX, isEmail } = require('../constants');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -31,6 +32,21 @@ async function register(req, res) {
 
   if (!name || !phone || !email || !password) {
     return res.status(400).json({ error: 'Completa nombre, móvil, correo y contraseña' });
+  }
+  if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > MAX.name) {
+    return res.status(400).json({ error: 'El nombre no es válido' });
+  }
+  if (typeof phone !== 'string' || phone.trim().length < 7 || phone.trim().length > MAX.phone) {
+    return res.status(400).json({ error: 'El móvil no es válido' });
+  }
+  if (!isEmail(email)) {
+    return res.status(400).json({ error: 'El correo no es válido' });
+  }
+  if (typeof password !== 'string' || password.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+  if (channel !== undefined && channel !== null && channel !== '' && !CHANNELS.includes(channel)) {
+    return res.status(400).json({ error: 'Canal no válido' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
@@ -89,18 +105,23 @@ async function updateMe(req, res) {
   const data = {};
 
   if (name !== undefined) {
-    if (typeof name !== 'string' || !name.trim()) {
+    if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > MAX.name) {
       return res.status(400).json({ error: 'El nombre no es válido' });
     }
     data.name = name.trim();
   }
-  if (phone !== undefined) data.phone = typeof phone === 'string' ? phone.trim() : '';
-  if (address !== undefined) data.address = typeof address === 'string' ? address.trim() : '';
+  if (phone !== undefined) {
+    if (typeof phone !== 'string' || phone.trim().length < 7 || phone.trim().length > MAX.phone) {
+      return res.status(400).json({ error: 'El móvil no es válido' });
+    }
+    data.phone = phone.trim();
+  }
+  if (address !== undefined) data.address = typeof address === 'string' ? address.trim().slice(0, MAX.address) : '';
   if (email !== undefined) {
-    const normalizedEmail = email.toLowerCase().trim();
-    if (!normalizedEmail) {
+    if (!isEmail(email)) {
       return res.status(400).json({ error: 'El correo no es válido' });
     }
+    const normalizedEmail = email.toLowerCase().trim();
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing && existing.id !== req.user.id) {
       return res.status(409).json({ error: 'Ya existe una cuenta con ese correo' });

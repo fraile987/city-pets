@@ -135,17 +135,17 @@
     grid.innerHTML = list.map(p => `
       <article class="card" data-product="${p.id}">
         <div class="card-media">
-          <img src="${p.images[0]}" alt="${p.name}" loading="lazy" />
+          <img src="${esc(p.images[0])}" alt="${esc(p.name)}" loading="lazy" />
           ${p.tags.includes('top') ? '<span class="tag-badge">Destacado</span>' : ''}
           <span class="stock-badge">${p.stock} en bodega</span>
         </div>
         <div class="card-body">
-          <span class="cat">${p.species} · ${p.category}</span>
-          <h3>${p.name}</h3>
-          <p class="desc">${p.desc}</p>
+          <span class="cat">${esc(p.species)} · ${esc(p.category)}</span>
+          <h3>${esc(p.name)}</h3>
+          <p class="desc">${esc(p.desc)}</p>
           <div class="price-row">
             <span class="price money">${fmtMoney(p.price)}</span>
-            <span class="unit">${p.unit}</span>
+            <span class="unit">${esc(p.unit)}</span>
           </div>
         </div>
         <div class="card-footer">
@@ -160,16 +160,16 @@
     if (!p) return;
     $('#pmTitle').textContent = p.name;
     $('#pmBody').innerHTML = `
-      <img src="${p.images[0]}" alt="${p.name}" style="border-radius:10px;aspect-ratio:4/3;object-fit:cover;width:100%" />
-      <p class="mt-3 muted">${p.species} · ${p.category}</p>
-      <h3 class="mt-2">${p.name}</h3>
-      <p>${p.desc}</p>
+      <img src="${esc(p.images[0])}" alt="${esc(p.name)}" style="border-radius:10px;aspect-ratio:4/3;object-fit:cover;width:100%" />
+      <p class="mt-3 muted">${esc(p.species)} · ${esc(p.category)}</p>
+      <h3 class="mt-2">${esc(p.name)}</h3>
+      <p>${esc(p.desc)}</p>
       <div class="price-row mt-3">
-        <span class="price money">${fmtMoney(p.price)}</span><span class="unit">${p.unit}</span>
+        <span class="price money">${fmtMoney(p.price)}</span><span class="unit">${esc(p.unit)}</span>
       </div>
       <p class="mt-2"><span class="stars-readonly">${renderStars(p.rating)}</span> ${p.rating} · ${p.stock} unidades en bodega</p>
       ${p.grams ? `<p class="mt-2 muted">📦 ${p.grams} g · Ración diaria sugerida: ${p.dailyRation} g/día</p>` : ''}
-      ${p.video ? `<video src="${p.video}" controls style="width:100%;margin-top:12px;border-radius:10px"></video>` : ''}
+      ${p.video ? `<video src="${esc(p.video)}" controls style="width:100%;margin-top:12px;border-radius:10px"></video>` : ''}
       <button class="btn btn-gold btn-block mt-4" data-add="${p.id}">Añadir al carrito — ${fmtMoney(p.price)}</button>`;
     openModal('#productModal');
   }
@@ -213,9 +213,9 @@
     }
     body.innerHTML = items.map(i => `
       <div class="cart-item">
-        <img src="${i.p.images[0]}" alt="${i.p.name}" />
+        <img src="${esc(i.p.images[0])}" alt="${esc(i.p.name)}" />
         <div class="cart-item-info">
-          <h4>${i.p.name}</h4>
+          <h4>${esc(i.p.name)}</h4>
           <div class="price-row" style="margin:2px 0">
             <span class="price money" style="font-size:1.02rem">${fmtMoney(i.p.price)}</span>
           </div>
@@ -267,8 +267,8 @@
     const { subtotal, total } = cartTotals();
     computedDelivery = getNextDeliverySlot();
     $('#checkoutUserInfo').innerHTML = `
-      <strong>${user.name}</strong><br/>
-      <span class="muted">📱 ${user.phone} · ✉️ ${user.email}</span>`;
+      <strong>${esc(user.name)}</strong><br/>
+      <span class="muted">📱 ${esc(user.phone)} · ✉️ ${esc(user.email)}</span>`;
     $('#coSubtotal').textContent = fmtMoney(subtotal);
     $('#coTotal').textContent = fmtMoney(total);
 
@@ -514,8 +514,8 @@
       grid.innerHTML = petsCache.map(p => `
       <div class="panel" style="margin:0">
         <div style="font-size:2rem">${p.species === 'Perros' ? '🐕' : '🐈'}</div>
-        <h4 class="mt-2">${p.name}</h4>
-        <p class="muted" style="font-size:.85rem">${p.breed || 'Raza: —'} · ${p.age} años</p>
+        <h4 class="mt-2">${esc(p.name)}</h4>
+        <p class="muted" style="font-size:.85rem">${esc(p.breed || 'Raza: —')} · ${p.age} años</p>
         <p class="muted" style="font-size:.85rem">Ración: ${p.ration ? p.ration + ' g/día' : 'no definida'}${p.weight ? ' · ' + p.weight + ' kg' : ''}</p>
         <div class="row mt-3">
           <button class="btn btn-outline btn-sm grow" data-edit-pet="${p.id}">Editar</button>
@@ -596,7 +596,7 @@
       <div class="panel">
         <div class="panel-header">
           <div>
-            <h3>${o.id}</h3>
+            <h3>${esc(o.id)}</h3>
             <span class="muted" style="font-size:.85rem">${new Date(o.createdAt).toLocaleString('es-CO')}</span>
           </div>
           ${statusBadge(o.status)}
@@ -605,15 +605,15 @@
           <table>
             <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th></tr></thead>
             <tbody>
-              ${o.items.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td><td class="money">${fmtMoney(i.price)}</td><td class="money">${fmtMoney(i.price * i.qty)}</td></tr>`).join('')}
+              ${o.items.map(i => `<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td class="money">${fmtMoney(i.price)}</td><td class="money">${fmtMoney(i.price * i.qty)}</td></tr>`).join('')}
             </tbody>
           </table>
         </div>
         <div class="row" style="justify-content:space-between;align-items:flex-end">
           <div class="muted" style="font-size:.85rem">
-            <div>🛵 Entrega: <strong>${o.deliveryLabel}</strong> (franja ${o.deliverySlot === 'manana' ? '🌅 Mañana' : '🌇 Tarde'})</div>
+            <div>🛵 Entrega: <strong>${esc(o.deliveryLabel)}</strong> (franja ${o.deliverySlot === 'manana' ? '🌅 Mañana' : '🌇 Tarde'})</div>
             <div>💳 Pago: ${o.payment.method === 'efectivo' ? 'Efectivo' + (o.payment.denomination ? ` — billete $${o.payment.denomination.toLocaleString('es-CO')}` : ' — sin cambio') : 'Digital (transferencia/datáfono)'}</div>
-            <div>📍 ${o.address}</div>
+            <div>📍 ${esc(o.address)}</div>
           </div>
           <div style="text-align:right">
             <div class="summary-line" style="padding:2px 0"><span>Subtotal</span><span class="money">${fmtMoney(o.subtotal)}</span></div>
@@ -630,9 +630,9 @@
   /* ---------- Herramientas ---------- */
   function fillCalcSelects() {
     const food = App.products.filter(p => p.grams > 0);
-    const opts = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-ration="${p.dailyRation}">${p.name} (${p.unit})</option>`).join('');
+    const opts = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-ration="${p.dailyRation}">${esc(p.name)} (${esc(p.unit)})</option>`).join('');
     $('#calcProduct').innerHTML = opts;
-    $('#compProduct').innerHTML = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-price="${p.price}">${p.name}</option>`).join('');
+    $('#compProduct').innerHTML = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-price="${p.price}">${esc(p.name)}</option>`).join('');
     $('#calcProduct').addEventListener('change', (e) => {
       const o = e.target.selectedOptions[0];
       if (!o) return;
@@ -715,13 +715,13 @@
     $('#recommendations').innerHTML = recs.length ? recs.map(p => `
       <article class="card" data-product="${p.id}">
         <div class="card-media">
-          <img src="${p.images[0]}" alt="${p.name}" loading="lazy" />
+          <img src="${esc(p.images[0])}" alt="${esc(p.name)}" loading="lazy" />
           ${p.stock <= 15 ? '<span class="tag-badge" style="background:var(--red-500);color:#fff">Últimas unidades</span>' : '<span class="tag-badge">Recomendado</span>'}
         </div>
         <div class="card-body">
-          <span class="cat">${p.species} · ${p.category}</span>
-          <h3>${p.name}</h3>
-          <div class="price-row"><span class="price money">${fmtMoney(p.price)}</span><span class="unit">${p.unit}</span></div>
+          <span class="cat">${esc(p.species)} · ${esc(p.category)}</span>
+          <h3>${esc(p.name)}</h3>
+          <div class="price-row"><span class="price money">${fmtMoney(p.price)}</span><span class="unit">${esc(p.unit)}</span></div>
         </div>
         <div class="card-footer"><button class="btn btn-gold grow" data-add="${p.id}">Añadir — ${fmtMoney(p.price)}</button></div>
       </article>`).join('')
@@ -758,7 +758,7 @@
       ${list.map(x => `
         <div class="panel" style="padding:14px">
           <div class="row" style="justify-content:space-between;align-items:center">
-            <strong>${x.userName}</strong>
+            <strong>${esc(x.userName)}</strong>
             <span class="muted" style="font-size:.75rem">${new Date(x.date).toLocaleDateString('es-CO')}</span>
           </div>
           <div class="mt-2" style="font-size:.85rem">
@@ -767,7 +767,7 @@
             Cumplimiento <span class="stars-readonly">${renderStars(x.cumplimiento)}</span> ·
             Confianza <span class="stars-readonly">${renderStars(x.confianza)}</span>
           </div>
-          ${x.msg ? `<p class="mt-2" style="font-size:.9rem">“${x.msg}”</p>` : ''}
+          ${x.msg ? `<p class="mt-2" style="font-size:.9rem">“${esc(x.msg)}”</p>` : ''}
         </div>`).join('')}`
     : '<p class="muted">Aún no hay evaluaciones.</p>';
   }

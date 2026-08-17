@@ -6,8 +6,10 @@
    ========================================================= */
 
 const prisma = require('../db');
+const { MAX } = require('../constants');
 
 const DELIVERY_COST = 8000;
+const MAX_QTY = 100;
 
 /* ---- Regla logística replicada del prototipo (js/data.js) ---- */
 function getCurrentSlot(date = new Date()) {
@@ -100,6 +102,9 @@ async function createOrder(req, res) {
     if (qty === null) {
       return res.status(400).json({ error: 'La cantidad de cada ítem debe ser un entero positivo' });
     }
+    if (qty > MAX_QTY) {
+      return res.status(400).json({ error: `La cantidad máxima por ítem es ${MAX_QTY}` });
+    }
     if (seen.has(it.productId)) {
       return res.status(400).json({ error: 'No repitas productos en el pedido' });
     }
@@ -109,6 +114,9 @@ async function createOrder(req, res) {
 
   if (typeof address !== 'string' || !address.trim()) {
     return res.status(400).json({ error: 'Indica la dirección de entrega' });
+  }
+  if (address.trim().length > MAX.address) {
+    return res.status(400).json({ error: `La dirección no puede superar ${MAX.address} caracteres` });
   }
 
   /* Normaliza el método de pago (objeto -> String serializado). */
