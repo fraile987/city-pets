@@ -333,3 +333,37 @@ check "frontend servido por la API (index)" "$(curl -s -o /dev/null -w '%{http_c
 check "backend bloqueado (404)" "$(curl -s -o /dev/null -w '%{http_code}' "$ROOT/city-pets-backend/server.js")" "404"
 check "CORS: origen externo sin cabecera ACAO" "$(curl -s -D - -o /dev/null -H 'Origin: https://evil.example.com' "$B/health" | grep -ci 'access-control-allow-origin')" "0"
 check "CORS: localhost de desarrollo permitido" "$(curl -s -D - -o /dev/null -H 'Origin: http://localhost:5500' "$B/health" | grep -ci 'access-control-allow-origin')" "1"
+
+echo ""
+echo "===== G10. Fase 9.3: login robusto, doble checkout, esc() y dbWrite ====="
+# --- login robusto: nunca 500 con tipos raros ---
+R=$(req /auth/login "" '{"email":12345,"password":"x"}')
+check "login email numerico 400 (no 500)" "$(code_of "$R")" "400"
+R=$(curl -s -w '|%{http_code}' -X POST "$B/auth/login" -H 'Content-Type: application/json' -d '{}')
+check "login sin cuerpo 400 (no 500)" "$(code_of "$R")" "400"
+R=$(req /auth/login "" '{"email":[],"password":[]}')
+check "login arrays 400 (no 500)" "$(code_of "$R")" "400"
+# --- guard de doble checkout ---
+if grep -q 'checkoutBusy' ../js/app.js && grep -q 'btn.disabled' ../js/app.js && grep -q 'finally' ../js/app.js; then
+  ok "confirmOrder bloquea doble envío y permite reintentar"
+else
+  ko "guard de doble checkout no implementado"
+fi
+# --- esc() en qty del carrito ---
+if grep -q 'esc(i.qty)' ../js/app.js; then
+  ok "i.qty escapado en el carrito"
+else
+  ko "i.qty sin escapar"
+fi
+# --- dbWrite robusto ---
+if awk '/function dbWrite/,/^}/' ../js/data.js | grep -q 'try {' && awk '/function dbWrite/,/^}/' ../js/data.js | grep -q 'catch'; then
+  ok "dbWrite maneja excepciones de localStorage"
+else
+  ko "dbWrite no maneja excepciones"
+fi
+# --- gramaje como número, no como dinero ---
+if grep -q "Number(grams).toLocaleString" ../js/app.js && ! grep -q 'fmtMoney(grams)' ../js/app.js; then
+  ok "gramaje mostrado como numero, no dinero"
+else
+  ko "gramaje sigue con fmtMoney"
+fi

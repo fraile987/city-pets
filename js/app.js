@@ -221,7 +221,7 @@
           </div>
           <div class="qty-ctl">
             <button data-qty="dec" data-id="${i.p.id}">−</button>
-            <span>${i.qty}</span>
+            <span>${esc(i.qty)}</span>
             <button data-qty="inc" data-id="${i.p.id}">+</button>
           </div>
         </div>
@@ -262,6 +262,7 @@
   /* ---------- Checkout ---------- */
   let selectedPay = 'efectivo';
   let computedDelivery = null;
+  let checkoutBusy = false;
 
   function openCheckout(user) {
     const { subtotal, total } = cartTotals();
@@ -332,8 +333,15 @@
     const user = App.currentUser();
     const { items } = cartTotals();
     if (!user || !items.length) return;
+    if (checkoutBusy) return;
     const address = $('#checkoutAddress').value.trim();
     if (!address) { toast('Indica la dirección de entrega', 'error'); return; }
+
+    checkoutBusy = true;
+    const btn = $('#btnConfirmOrder');
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Procesando…';
 
     const payload = {
       items: items.map(i => ({ productId: i.p.id, qty: i.qty })),
@@ -354,6 +362,10 @@
       AppNav('historial');
     } catch (e) {
       toast(e.message, 'error');
+    } finally {
+      checkoutBusy = false;
+      btn.disabled = false;
+      btn.textContent = originalLabel;
     }
   }
 
@@ -650,7 +662,7 @@
       const bags = days > 0 ? Math.ceil(30 / days) : 0;
       $('#calcResult').innerHTML = `
         <div class="panel" style="background:var(--cloud)">
-          <strong>📦 ${fmtMoney(grams)} g / ${ration} g/día</strong>
+          <strong>📦 ${Number(grams).toLocaleString('es-CO')} g / ${ration} g/día</strong>
           <div class="row mt-3" style="justify-content:space-between">
             <div class="ta-center grow"><div style="font-size:1.8rem;font-weight:800;color:var(--navy-800)">${days}</div><div class="muted" style="font-size:.8rem">días de alimento</div></div>
             <div class="ta-center grow"><div style="font-size:1.8rem;font-weight:800;color:var(--navy-800)">${(days / 30.4).toFixed(1)}</div><div class="muted" style="font-size:.8rem">meses aprox.</div></div>

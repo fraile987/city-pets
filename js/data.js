@@ -83,7 +83,7 @@ function dbRead(key, fallback) {
   } catch (e) { return fallback; }
 }
 function dbWrite(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* noop */ }
 }
 
 /* El catálogo ya no persiste en localStorage: siempre viene de la API. */

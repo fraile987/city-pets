@@ -77,10 +77,10 @@ async function register(req, res) {
 }
 
 async function login(req, res) {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Indica correo y contraseña' });
+  if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
+    return res.status(400).json({ error: 'Indica correo y contraseña válidos' });
   }
 
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
