@@ -1,0 +1,18 @@
+# =========================================================
+# CITY PETS — Timer del backup diario (Fase 10.5)
+#
+# Dispara citypets-backup.service todos los días.
+# Persistent=true: si el sistema estuvo apagado a la hora
+# programada, el backup corre al arrancar (catch-up).
+# RandomizedDelaySec: evita coincidir con otros timers.
+# =========================================================
+[Unit]
+Description=City Pets: ejecucion diaria del backup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

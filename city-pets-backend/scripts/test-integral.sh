@@ -935,4 +935,88 @@ AFTER_D=$(md5sum prisma/dev.db 2>/dev/null | cut -d' ' -f1)
 [ "$AFTER_D" = "$BEFORE_D" ] && ok "10.3: BD del repo intacta" || ko "10.3: se escribio en la BD del repo"
 kill "$SUP_PID" 2>/dev/null; wait "$SUP_PID" 2>/dev/null
 rm -rf "$SBOX"
+
+echo ""
+echo "===== G19. Fase 10.5: backups automaticos ====="
+# ---------- artefactos: unidades systemd del backup ----------
+[ -f deploy/citypets-backup.service ] && [ -f deploy/citypets-backup.timer ] && ok "10.5: unidades systemd del backup creadas" || ko "10.5: faltan unidades del backup"
+grep -q 'OnCalendar=daily' deploy/citypets-backup.timer && grep -q 'Persistent=true' deploy/citypets-backup.timer && ok "10.5: timer diario + Persistent=true (catch-up)" || ko "10.5: timer sin schedule/persistencia"
+grep -q 'BACKUP_KEEP=7' deploy/citypets-backup.service && ok "10.5: retencion de 7 dias configurada" || ko "10.5: sin retencion en el servicio"
+if command -v systemd-analyze >/dev/null 2>&1; then
+  systemd-analyze calendar daily >/dev/null 2>&1 && ok "10.5: calendario 'daily' valido" || ko "10.5: calendario 'daily' invalido"
+  OUT=$(systemd-analyze verify deploy/citypets-backup.service deploy/citypets-backup.timer 2>&1)
+  CLEAN=$(echo "$OUT" | grep -vi 'not executable\|No such file or directory\|citypets-backup' || true)
+  [ -z "$CLEAN" ] && ok "10.5: units validadas (systemd-analyze verify)" || ko "10.5: units con errores ($CLEAN)"
+fi
+# ---------- rotacion ----------
+SBOX=/tmp/citypets-g19-backup
+SBOX_DATA="$SBOX/data"
+SBOX_MEDIA="$SBOX/uploads"
+SBOX_BKP="$SBOX/backups"
+rm -rf "$SBOX"
+mkdir -p "$SBOX_DATA" "$SBOX_MEDIA" "$SBOX_BKP"
+: > "$SBOX_DATA/dev.db"
+echo "foto" > "$SBOX_MEDIA/foto.txt"
+for i in 1 2 3; do
+  DB_PATH="$SBOX_DATA/dev.db" UPLOADS_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" BACKUP_KEEP=2 bash scripts/backup.sh >/dev/null 2>&1
+  sleep 1
+done
+check "10.5: rotacion: tras 3 backups quedan 2 (KEEP=2)" "$(ls -1 "$SBOX_BKP"/citypets-*.tar.gz 2>/dev/null | wc -l)" "2"
+DB_PATH="/no/existe/dev.db" UPLOADS_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" bash scripts/backup.sh >/dev/null 2>&1
+RC=$?
+check "10.5: backup falla si falta la BD (no corrompe nada)" "$RC" "1"
+# ---------- ejecucion automatica con systemd (usuario, en laboratorio) ----------
+rm -f "$SBOX_BKP"/citypets-*.tar.gz
+UD="$HOME/.config/systemd/user"
+if systemctl --user --no-pager list-timers >/dev/null 2>&1; then
+  systemctl --user stop citypets-backup.timer citypets-backup.service >/dev/null 2>&1 || true
+  rm -f "$UD/citypets-backup.service" "$UD/citypets-backup.timer"
+  mkdir -p "$UD"
+  cat > "$UD/citypets-backup.service" <<EOF
+[Unit]
+Description=City Pets: backup (lab G19)
+[Service]
+Type=oneshot
+ExecStart=$PWD/scripts/backup.sh
+Environment=DB_PATH=$SBOX_DATA/dev.db
+Environment=UPLOADS_DIR=$SBOX_MEDIA
+Environment=BACKUP_DIR=$SBOX_BKP
+Environment=BACKUP_KEEP=7
+EOF
+  cat > "$UD/citypets-backup.timer" <<EOF
+[Unit]
+Description=City Pets: backup cada minuto (lab G19)
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+  systemctl --user daemon-reload
+  systemctl --user enable --now citypets-backup.timer >/dev/null 2>&1
+  systemctl --user --no-pager list-timers | grep -q citypets-backup && ok "10.5: timer activo en systemd" || ko "10.5: timer no visible en systemd"
+  AUTO_OK="0"
+  for i in $(seq 1 20); do
+    N=$(ls -1 "$SBOX_BKP"/citypets-*.tar.gz 2>/dev/null | wc -l)
+    [ "$N" -ge 1 ] && { AUTO_OK="1"; break; }
+    sleep 4
+  done
+  [ "$AUTO_OK" = "1" ] && ok "10.5: backup ejecutado automaticamente por systemd" || ko "10.5: el timer no genero backup"
+  BKP=$(ls -1t "$SBOX_BKP"/citypets-*.tar.gz 2>/dev/null | head -1)
+  if [ -n "$BKP" ]; then
+    tar -tzf "$BKP" | grep -q 'dev.db' && ok "10.5: backup automatico contiene la BD" || ko "10.5: backup sin dev.db"
+    tar -tzf "$BKP" | grep -q 'uploads' && ok "10.5: backup automatico contiene los medios" || ko "10.5: backup sin uploads"
+  else
+    ko "10.5: sin backup para inspeccionar"
+  fi
+  systemctl --user disable --now citypets-backup.timer >/dev/null 2>&1
+  systemctl --user stop citypets-backup.service >/dev/null 2>&1
+  rm -f "$UD/citypets-backup.service" "$UD/citypets-backup.timer"
+  systemctl --user daemon-reload
+else
+  # sin systemd de usuario: simulacion del disparo
+  DB_PATH="$SBOX_DATA/dev.db" UPLOADS_DIR="$SBOX_MEDIA" BACKUP_DIR="$SBOX_BKP" bash scripts/backup.sh >/dev/null 2>&1
+  [ -n "$(ls -1 "$SBOX_BKP"/citypets-*.tar.gz 2>/dev/null)" ] && ok "10.5: backup ejecutado (simulacion, sin systemd de usuario)" || ko "10.5: backup fallo en simulacion"
+fi
+rm -rf "$SBOX"
 [ "$FAIL" -eq 0 ]

@@ -1,0 +1,26 @@
+# =========================================================
+# CITY PETS — Backup diario (Fase 10.5)
+#
+# Servicio oneshot que ejecuta scripts/backup.sh sobre las
+# rutas de producción. Lo dispara citypets-backup.timer.
+#
+# Instalación (VPS):
+#   sudo cp deploy/citypets-backup.service deploy/citypets-backup.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now citypets-backup.timer
+#   systemctl list-timers citypets-backup.timer
+#
+# Ajustar User= según el propietario de /var/lib/city-pets
+# (por defecto corre como root; si los lanza citypets,
+# usa User=citypets y Group=citypets).
+# =========================================================
+[Unit]
+Description=City Pets: backup diario (SQLite + medios)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/city-pets/city-pets-backend/scripts/backup.sh
+Environment=DB_PATH=/var/lib/city-pets/data/dev.db
+Environment=UPLOADS_DIR=/var/lib/city-pets/uploads
+Environment=BACKUP_DIR=/var/lib/city-pets/backups
+Environment=BACKUP_KEEP=7
