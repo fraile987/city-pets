@@ -18,6 +18,7 @@
     bindCheckout();
     bindProfile();
     bindPets();
+    bindConfirm();
     bindTools();
     renderFeedbackList();
     await Promise.all([initSession(), loadProducts()]);
@@ -529,7 +530,7 @@
       const del = e.target.closest('[data-del-pet]');
       if (!edit && !del) return;
       const id = (edit || del).dataset[del ? 'delPet' : 'editPet'];
-      if (del) { deletePet(id); return; }
+      if (del) { openDeletePetConfirm(id); return; }
       openPetModal(id);
     });
     $('#btnSavePet').addEventListener('click', savePet);
@@ -862,6 +863,35 @@
           ${x.msg ? `<p class="mt-2" style="font-size:.9rem">“${esc(x.msg)}”</p>` : ''}
         </div>`).join('')}`
     : '<p class="muted">Aún no hay evaluaciones.</p>';
+  }
+
+  /* ---------- Confirmación de borrado ---------- */
+  let pendingDeletePetId = null;
+
+  function openDeletePetConfirm(id) {
+    const p = petsCache.find(x => x.id === id);
+    if (!p) return;
+    pendingDeletePetId = id;
+    $('#cfmTitle').textContent = 'Eliminar mascota';
+    $('#cfmBody').innerHTML = `
+      <p>Se eliminará a <strong>${esc(p.name)}</strong> de tu perfil.</p>
+      <p class="mt-2" style="color:var(--red-500);font-weight:700">⚠️ Esta acción no se puede deshacer.</p>`;
+    $('#confirmModal').classList.add('open');
+  }
+
+  function closeConfirmModal() {
+    pendingDeletePetId = null;
+    $('#confirmModal').classList.remove('open');
+  }
+
+  function bindConfirm() {
+    document.querySelectorAll('[data-close-confirm]').forEach(b =>
+      b.addEventListener('click', closeConfirmModal));
+    $('#cfmDelete').addEventListener('click', () => {
+      const id = pendingDeletePetId;
+      closeConfirmModal();
+      if (id) deletePet(id);
+    });
   }
 
   /* ---------- Modales ---------- */

@@ -448,6 +448,20 @@
     </div>
   </div>
 
+  <!-- ================= MODAL CONFIRMACIÓN MASCOTA ================= -->
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="modal">
+      <div class="modal-head"><h3 id="cfmTitle">Eliminar mascota</h3><button class="ico-close" data-close-confirm aria-label="Cerrar">✕</button></div>
+      <div class="modal-body">
+        <div id="cfmBody"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-confirm>Cancelar</button>
+        <button class="btn btn-outline" id="cfmDelete" style="color:var(--red-500);border-color:var(--red-500)">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-wrap" id="toastWrap"></div>
 
   <script src="js/data.js"></script>

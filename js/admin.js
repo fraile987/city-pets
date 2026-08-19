@@ -21,6 +21,7 @@
     bindProducts();
     bindOrders();
     bindIncidents();
+    bindConfirm();
     initSession();
   }
 
@@ -207,7 +208,7 @@
       const edit = e.target.closest('[data-edit]');
       const del = e.target.closest('[data-del]');
       if (edit) editProduct(edit.dataset.edit);
-      if (del) deleteProduct(del.dataset.del);
+      if (del) openDeleteProductConfirm(del.dataset.del);
     });
   }
 
@@ -383,11 +384,70 @@
     await refreshAll();
   }
 
+  /* ---------- Confirmación de borrado (admin) ---------- */
+  let pendingDeleteId = null;
+
+  function openDeleteProductConfirm(id) {
+    const p = productsCache.find(x => x.id === id);
+    if (!p) return;
+    pendingDeleteId = id;
+    $('#cfmTitle').textContent = 'Eliminar producto';
+    $('#cfmBody').innerHTML = `
+      <p>Se eliminará el producto <strong>${esc(p.name)}</strong>.</p>
+      <p class="mt-2" style="color:var(--red-500);font-weight:700">⚠️ Esta acción no se puede deshacer.</p>`;
+    openConfirmModal();
+  }
+
+  function openConfirmModal() {
+    $('#confirmModal').classList.add('open');
+  }
+
+  function closeConfirmModal() {
+    pendingDeleteId = null;
+    $('#confirmModal').classList.remove('open');
+  }
+
+  function bindConfirm() {
+    document.querySelectorAll('[data-close-confirm]').forEach(b =>
+      b.addEventListener('click', closeConfirmModal));
+    $('#cfmDelete').addEventListener('click', () => {
+      const id = pendingDeleteId;
+      closeConfirmModal();
+      if (id) deleteProduct(id);
+    });
+  }
+
+  /* ---------- Detalle de pedido (admin) ---------- */
+  function openOrderDetail(id) {
+    const o = ordersCache.find(x => x.id === id);
+    if (!o) return;
+    const items = Array.isArray(o.items) ? o.items : [];
+    const itemsHtml = items.length
+      ? items.map(i => `
+        <tr>
+          <td>${esc(i.name)}</td>
+          <td class="ta-center">${i.qty}</td>
+          <td class="money">${fmtMoney(i.price)}</td>
+          <td class="money">${fmtMoney(i.price * i.qty)}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="4" class="ta-center muted">Este pedido no tiene productos registrados.</td></tr>`;
+    $('#odCustomer').innerHTML = `${esc(o.userName)}<br/><span class="muted" style="font-size:.78rem">📱 ${esc(o.phone)}</span>`;
+    $('#odDelivery').textContent = o.deliveryLabel + (o.deliverySlot === 'manana' ? ' (🌅 Mañana)' : ' (🌇 Tarde)');
+    $('#odStatus').textContent = o.status === 'entregado' ? 'Entregado' : o.status === 'incidente' ? 'Incidente' : 'Pendiente';
+    $('#odItems').innerHTML = itemsHtml;
+    $('#odSubtotal').textContent = fmtMoney(o.subtotal);
+    $('#odDeliveryCost').textContent = fmtMoney(o.delivery);
+    $('#odTotal').textContent = fmtMoney(o.total);
+    $('#orderModal').classList.add('open');
+  }
+
   /* ---------- Pedidos ---------- */
   function bindOrders() {
     $('#adminOrders').addEventListener('click', async (e) => {
       const del = e.target.closest('[data-odeliver]');
       const inc = e.target.closest('[data-oincident]');
+      const det = e.target.closest('[data-odetail]');
+      if (det) { openOrderDetail(det.dataset.odetail); return; }
       if (!del && !inc) return;
       const id = (del || inc).dataset[inc ? 'oincident' : 'odeliver'];
       const status = del ? 'entregado' : 'incidente';
@@ -412,6 +472,7 @@
         <td>${o.payment.method === 'efectivo' ? '💵 Efectivo' : '📲 Digital'}</td>
         <td><span class="badge ${o.status === 'entregado' ? 'badge-green' : o.status === 'incidente' ? 'badge-red' : 'badge-gold'}">${o.status === 'entregado' ? 'Entregado' : o.status === 'incidente' ? 'Incidente' : 'Pendiente'}</span></td>
         <td>
+          <button class="btn btn-navy btn-sm" data-odetail="${o.id}">Ver detalle</button>
           ${o.status !== 'entregado' ? `<button class="btn btn-navy btn-sm" data-odeliver="${o.id}">✓ Entregado</button>` : ''}
           ${o.status !== 'incidente' ? `<button class="btn btn-outline btn-sm" style="color:var(--red-500);border-color:var(--red-500)" data-oincident="${o.id}">⚠ Incidencia</button>` : ''}
         </td>
@@ -474,4 +535,5 @@
   function openModal() { $('#productModal').classList.add('open'); }
   function closeModal() { $('#productModal').classList.remove('open'); }
   document.querySelectorAll('[data-close-amy]').forEach(b => b.addEventListener('click', closeModal));
+  document.querySelectorAll('[data-close-order]').forEach(b => b.addEventListener('click', () => $('#orderModal').classList.remove('open')));
 })();

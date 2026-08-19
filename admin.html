@@ -213,6 +213,54 @@
     </div>
   </div>
 
+  <!-- ============ MODAL CONFIRMACIÓN (admin) ============ -->
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="cfmTitle">Confirmar acción</h3>
+        <button class="ico-close" data-close-confirm aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="cfmBody"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-confirm>Cancelar</button>
+        <button class="btn btn-outline" id="cfmDelete" style="color:var(--red-500);border-color:var(--red-500)">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL DETALLE DE PEDIDO (admin) ============ -->
+  <div class="modal-backdrop" id="orderModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Detalle del pedido</h3>
+        <button class="ico-close" data-close-order aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px">
+          <div>
+            <div id="odCustomer" style="font-weight:800"></div>
+            <div class="muted" style="font-size:.82rem;margin-top:4px">🛵 <span id="odDelivery"></span></div>
+          </div>
+          <span class="badge badge-gold" id="odStatus"></span>
+        </div>
+        <div class="table-wrap mb-3">
+          <table>
+            <thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Subtotal</th></tr></thead>
+            <tbody id="odItems"></tbody>
+          </table>
+        </div>
+        <div class="summary-line"><span>Subtotal artículos</span><span class="money" id="odSubtotal">$0</span></div>
+        <div class="summary-line"><span>Domicilio</span><span class="money" id="odDeliveryCost">$0</span></div>
+        <div class="summary-line total"><span>Total</span><span class="money" id="odTotal">$0</span></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-order>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-wrap" id="toastWrap"></div>
 
   <script src="js/data.js"></script>
