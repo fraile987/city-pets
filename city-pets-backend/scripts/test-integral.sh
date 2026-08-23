@@ -207,7 +207,7 @@ npm run promote -- ana@test.co >/dev/null 2>&1
 check "promote aplica role admin" "$(req /auth/me "$TANA" | body_of | json 'j.user.role')" "admin"
 R=$(req /admin/orders "$TANA")
 check "admin lista pedidos 200" "$(code_of "$R")" "200"
-check "admin ve 2 pedidos" "$(echo "$R" | body_of | json 'j.length')" "2"
+check "admin ve 2 pedidos" "$(echo "$R" | body_of | json 'j.items.length')" "2"
 R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$OID/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"confirmado"}')
 check "admin confirma pedido 200" "$(code_of "$R")" "200"
 R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$OID/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"enviado"}')
@@ -244,7 +244,7 @@ check "orden con producto nuevo 201" "$(code_of "$R")" "201"
 R=$(curl -s -w '|%{http_code}' -X DELETE "$B/products/$PIDNEW" -H "Authorization: Bearer $TANA")
 check "delete producto 200" "$(code_of "$R")" "200"
 check "eliminado del catalogo" "$(req /products | body_of | json 'j.some(p=>p.id===v)' "$PIDNEW")" "false"
-check "historico preserva item" "$(req /admin/orders "$TANA" | body_of | json 'j.some(o=>o.items.some(i=>i.name===v && i.productId===null))' "Admin crea X")" "true"
+check "historico preserva item" "$(req /admin/orders "$TANA" | body_of | json 'j.items.some(o=>o.items.some(i=>i.name===v && i.productId===null))' "Admin crea X")" "true"
 XSS='<img src=x onerror=alert(1)>'
 R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"name\":\"$XSS\",\"species\":\"Perros\",\"price\":1000,\"stock\":5}")
 check "admin guarda nombre con HTML 201" "$(code_of "$R")" "201"
@@ -307,7 +307,7 @@ Promise.all([mk(process.argv[1]), mk(process.argv[2])]).then(async (rs) => {
 check "concurrencia: una sola compra gana (201 y 400)" "$(echo "$CONC" | cut -d'|' -f1)" "201 400"
 check "mensaje de stock insuficiente" "$(echo "$CONC" | cut -d'|' -f2)" "1"
 check "stock final 0 (no se vendio de mas)" "$(req /products | body_of | json 'j.find(x=>x.id===v).stock' "$PIDCONC")" "0"
-check "solo 1 pedido con el producto" "$(req /admin/orders "$TANA" | body_of | json 'j.filter(o=>o.items.some(i=>i.productId===v)).length' "$PIDCONC")" "1"
+check "solo 1 pedido con el producto" "$(req /admin/orders "$TANA" | body_of | json 'j.items.filter(o=>o.items.some(i=>i.productId===v)).length' "$PIDCONC")" "1"
 
 echo ""
 echo "===== G9. Fase 9.2: rate-limit, CORS y API relativa ====="
@@ -1074,7 +1074,7 @@ check "10.6: E2E: checkout 201" "$(code_of "$R")" "201"
 [ -n "$OID" ] && ok "10.6: E2E: pedido con id" || ko "10.6: E2E: pedido sin id"
 # historial propio + admin + auth requerida
 check "10.6: E2E: historial comprador incluye pedido" "$(curl -s http://127.0.0.1:$PX/api/orders -H "Authorization: Bearer $TB20" | json 'j.some(o=>o.id===v)' "$OID")" "true"
-check "10.6: E2E: admin ve el pedido" "$(curl -s http://127.0.0.1:$PX/api/admin/orders -H "Authorization: Bearer $TA20" | json 'j.some(o=>o.id===v)' "$OID")" "true"
+check "10.6: E2E: admin ve el pedido" "$(curl -s http://127.0.0.1:$PX/api/admin/orders -H "Authorization: Bearer $TA20" | json 'j.items.some(o=>o.id===v)' "$OID")" "true"
 check "10.6: E2E: historial sin auth 401" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PX/api/orders)" "401"
 # ciclo de vida del pedido
 check "10.6: E2E: admin confirma pedido" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "http://127.0.0.1:$PX/api/admin/orders/$OID/status" -H "Authorization: Bearer $TA20" -H 'Content-Type: application/json' -d '{"status":"confirmado"}')" "200"

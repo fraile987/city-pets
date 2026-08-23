@@ -107,14 +107,22 @@
       const period = $('#revPeriod') ? $('#revPeriod').value : 'diario';
       const [products, orders, attribution, settings, revenue, closures] = await Promise.all([
         api('/products', { auth: false }),
-        api('/admin/orders'),
+        api('/admin/orders?' + ordersQuery()),
         api('/admin/attribution'),
         api('/settings', { auth: false }),
         api('/admin/revenue?period=' + encodeURIComponent(period)),
         api('/admin/closures')
       ]);
       productsCache = products;
-      ordersCache = orders;
+      ordersCache = Array.isArray(orders.items) ? orders.items : [];
+      ordersMeta = {
+        total: orders.total || 0,
+        page: orders.page || 1,
+        limit: orders.limit || ORDERS_PAGE_SIZE,
+        pages: orders.pages || 1,
+        totalVal: orders.totalVal || 0,
+        byStatus: orders.byStatus || {}
+      };
       attributionCache = attribution;
       settingsCache = settings || settingsCache;
       revenueCache = revenue;
@@ -132,6 +140,7 @@
     renderProductsTable();
     renderOrderFilters();
     renderOrdersTable();
+    renderPagination();
     renderIncidents();
     renderAttribution();
     renderSettings();
@@ -252,16 +261,18 @@
 
   /* ---------- Filtros de pedidos (P2.1) ---------- */
   let orderFilter = 'todos';
-
-  function applyOrderFilter(list) {
-    if (orderFilter === 'todos') return list;
-    return list.filter(o => o.status === orderFilter);
-  }
+  let adminSearch = '';
+  let adminDateFrom = '';
+  let adminDateTo = '';
+  let adminSort = 'fecha';
+  let ordersPage = 1;
+  let ordersMeta = { total: 0, page: 1, limit: 25, pages: 1, totalVal: 0, byStatus: {} };
+  const ORDERS_PAGE_SIZE = 25;
 
   function renderOrderFilters() {
-    const subset = ordersCache.filter(matchesOrderBase);
-    const counts = { todos: subset.length, pendiente: 0, confirmado: 0, enviado: 0, entregado: 0, cancelado: 0 };
-    subset.forEach(o => { if (counts[o.status] !== undefined) counts[o.status]++; });
+    const bs = ordersMeta.byStatus || {};
+    const total = Object.values(bs).reduce((s, v) => s + (v || 0), 0);
+    const counts = { todos: total, pendiente: bs.pendiente || 0, confirmado: bs.confirmado || 0, enviado: bs.enviado || 0, entregado: bs.entregado || 0, cancelado: bs.cancelado || 0 };
     $$('#orderFilters [data-ofcount]').forEach(el => {
       el.textContent = counts[el.dataset.ofcount] ?? 0;
     });
@@ -273,49 +284,43 @@
       if (!b) return;
       orderFilter = b.dataset.ofilter;
       $$('#orderFilters .tab').forEach(t => t.classList.toggle('active', t.dataset.ofilter === orderFilter));
-      renderOrdersTable();
+      ordersPage = 1;
+      loadOrders();
     });
   }
 
-  /* ---------- Búsqueda, fechas y orden de pedidos (P4/P5) ---------- */
-  const ORDER_STATUS_SEQ = { pendiente: 0, confirmado: 1, enviado: 2, entregado: 3, cancelado: 4, incidente: 5 };
-  let adminSearch = '';
-  let adminDateFrom = '';
-  let adminDateTo = '';
-  let adminSort = 'fecha';
-
-  /* Base: búsqueda (cliente/teléfono/ID) + rango createdAt. El filtro de
-     pestaña (estado) y el orden se aplican después. */
-  function matchesOrderBase(o) {
-    if (adminSearch) {
-      const q = adminSearch.trim().toLowerCase();
-      if (!(
-        (o.userName || '').toLowerCase().includes(q) ||
-        (o.phone || '').toLowerCase().includes(q) ||
-        (o.id || '').toLowerCase().includes(q)
-      )) return false;
-    }
-    if (adminDateFrom || adminDateTo) {
-      const d = String(o.createdAt || '').slice(0, 10);
-      if (adminDateFrom && d < adminDateFrom) return false;
-      if (adminDateTo && d > adminDateTo) return false;
-    }
-    return true;
+  /* ---------- Búsqueda, fechas, orden y paginación de pedidos (P4/P5/P7.2) ---------- */
+  function ordersQuery() {
+    const params = new URLSearchParams();
+    params.set('page', String(ordersPage));
+    params.set('limit', String(ORDERS_PAGE_SIZE));
+    if (adminSearch) params.set('q', adminSearch);
+    if (adminDateFrom) params.set('from', adminDateFrom);
+    if (adminDateTo) params.set('to', adminDateTo);
+    if (orderFilter !== 'todos') params.set('status', orderFilter);
+    params.set('sort', adminSort);
+    return params.toString();
   }
 
-  function filterOrders() {
-    let list = ordersCache.filter(matchesOrderBase);
-    if (orderFilter !== 'todos') list = list.filter(o => o.status === orderFilter);
-    if (adminSort === 'total') {
-      list.sort((a, b) => b.total - a.total);
-    } else if (adminSort === 'estado') {
-      list.sort((a, b) => (ORDER_STATUS_SEQ[a.status] ?? 9) - (ORDER_STATUS_SEQ[b.status] ?? 9));
-    } else {
-      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  async function loadOrders() {
+    try {
+      const data = await api('/admin/orders?' + ordersQuery());
+      ordersCache = Array.isArray(data.items) ? data.items : [];
+      ordersMeta = {
+        total: data.total || 0,
+        page: data.page || 1,
+        limit: data.limit || ORDERS_PAGE_SIZE,
+        pages: data.pages || 1,
+        totalVal: data.totalVal || 0,
+        byStatus: data.byStatus || {}
+      };
+    } catch (e) {
+      toast(e.message, 'error');
     }
-    return list;
   }
 
+  /* La exportación CSV envía los filtros actuales y exporta TODOS los
+     coincidentes (el backend ignora página/limite). */
   function currentOrderExportQuery() {
     const params = new URLSearchParams();
     if (adminSearch) params.set('q', adminSearch);
@@ -345,11 +350,24 @@
     }
   }
 
+  function renderPagination() {
+    const el = $('#ordersPageInfo');
+    if (!el) return;
+    el.textContent = `Página ${ordersMeta.page} de ${ordersMeta.pages || 1} · ${ordersMeta.total} pedido(s)`;
+    const prev = $('#ordersPrev');
+    const next = $('#ordersNext');
+    if (prev) prev.disabled = ordersMeta.page <= 1;
+    if (next) next.disabled = ordersMeta.page >= (ordersMeta.pages || 1);
+  }
+
   function bindOrderTools() {
-    $('#ordSearch').addEventListener('input', () => { adminSearch = $('#ordSearch').value; renderOrdersTable(); renderOrderFilters(); });
-    $('#ordFrom').addEventListener('change', () => { adminDateFrom = $('#ordFrom').value; renderOrdersTable(); renderOrderFilters(); });
-    $('#ordTo').addEventListener('change', () => { adminDateTo = $('#ordTo').value; renderOrdersTable(); renderOrderFilters(); });
-    $('#ordSort').addEventListener('change', () => { adminSort = $('#ordSort').value; renderOrdersTable(); });
+    const reloadPage1 = () => { ordersPage = 1; loadOrders(); };
+    $('#ordSearch').addEventListener('input', reloadPage1);
+    $('#ordFrom').addEventListener('change', reloadPage1);
+    $('#ordTo').addEventListener('change', reloadPage1);
+    $('#ordSort').addEventListener('change', reloadPage1);
+    $('#ordersPrev').addEventListener('click', () => { if (ordersMeta.page > 1) { ordersPage--; loadOrders(); } });
+    $('#ordersNext').addEventListener('click', () => { if (ordersMeta.page < (ordersMeta.pages || 1)) { ordersPage++; loadOrders(); } });
     $('#btnExportOrders').addEventListener('click', () => downloadCSV('/admin/export/orders?' + currentOrderExportQuery(), 'citypets_pedidos.csv'));
     $('#btnExportClosures').addEventListener('click', () => downloadCSV('/admin/export/closures', 'citypets_cierres.csv'));
   }
@@ -443,7 +461,13 @@
         const tab = a.dataset.atab;
         $$('[data-atab]').forEach(x => x.classList.toggle('active', x.dataset.atab === tab));
         $$('[data-aview]').forEach(v => v.classList.toggle('hidden', v.dataset.aview !== tab));
-        renderAll();
+        /* Dashboard siempre muestra la página 1 (KPIs globales). */
+        if (tab === 'dashboard' && ordersPage !== 1) {
+          ordersPage = 1;
+          loadOrders();
+        } else {
+          renderAll();
+        }
       });
     });
   }
@@ -451,18 +475,21 @@
   /* ---------- KPIs ---------- */
   function renderKPIs() {
     const orders = ordersCache;
+    const bs = ordersMeta.byStatus || {};
+    const pendingCount = bs.pendiente || 0;
+    const incidentCount = bs.incidente || 0;
     const pending = orders.filter(o => o.status === 'pendiente');
     const incidents = orders.filter(o => o.status === 'incidente');
-    const totalVal = orders.reduce((s, o) => s + o.total, 0);
+    const totalVal = ordersMeta.totalVal;
     const stock = productsCache.reduce((s, p) => s + p.stock, 0);
 
-    $('#kpiOrders').textContent = orders.length;
+    $('#kpiOrders').textContent = ordersMeta.total;
     $('#kpiOrdersVal').textContent = fmtMoney(totalVal) + ' en ventas';
-    $('#kpiPending').textContent = pending.length;
+    $('#kpiPending').textContent = pendingCount;
     $('#kpiPendingVal').textContent = pending.length ? 'Próxima entrega: ' + pending[0].deliveryLabel : 'Todo entregado';
     $('#kpiStock').textContent = stock.toLocaleString('es-CO');
     $('#kpiStockProd').textContent = productsCache.length + ' referencias';
-    $('#kpiIncidents').textContent = incidents.length;
+    $('#kpiIncidents').textContent = incidentCount;
     const incidentUsers = new Set(incidents.map(i => i.userName));
     $('#kpiIncidentsUsers').textContent = incidentUsers.size + ' usuarios no cumplieron';
 
@@ -857,7 +884,7 @@
   }
 
   function renderOrdersTable() {
-    const orders = filterOrders();
+    const orders = ordersCache;
     $('#adminOrders').innerHTML = orders.map(o => {
       const info = statusInfo(o.status);
       const actions = nextStatuses(o.status).map(s => `

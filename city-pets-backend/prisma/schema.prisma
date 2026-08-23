@@ -81,6 +81,8 @@ model Order {
   clientOrderKey String?
 
   @@unique([userId, clientOrderKey])
+  @@index([status, createdAt])
+  @@index([status, deliveredAt])
 }
 
 model OrderItem {

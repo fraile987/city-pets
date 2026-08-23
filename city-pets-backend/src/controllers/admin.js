@@ -4,6 +4,7 @@
    ========================================================= */
 
 const prisma = require('../db');
+const { Prisma } = require('@prisma/client');
 const { ORDER_STATUSES, ORDER_TRANSITIONS } = require('../constants');
 const { serializeOrder } = require('./orders');
 
@@ -261,11 +262,110 @@ async function exportClosuresCSV(req, res) {
 }
 
 async function listAllOrders(req, res) {
-  const orders = await prisma.order.findMany({
-    include: { items: true },
-    orderBy: { createdAt: 'desc' }
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const from = req.query.from;
+  const to = req.query.to;
+  const status = req.query.status;
+  const sort = req.query.sort || 'fecha';
+  const page = req.query.page === undefined ? 1 : parseInt(req.query.page, 10);
+  const limit = req.query.limit === undefined ? 25 : parseInt(req.query.limit, 10);
+
+  if (Number.isNaN(page) || page < 1 || Number.isNaN(limit) || limit < 1 || limit > 100) {
+    return res.status(400).json({ error: 'page (>=1) o limit (1-100) inválidos' });
+  }
+
+  if (status && status !== 'todos' && !ORDER_STATUS_SEQ.includes(status)) {
+    return res.status(400).json({ error: 'Estado inválido' });
+  }
+  if (!['fecha', 'total', 'estado'].includes(sort)) {
+    return res.status(400).json({ error: 'Ordenamiento inválido' });
+  }
+  if ((from && !to) || (to && !from) || (from && (!toDateOnly(from) || !toDateOnly(to) || from > to))) {
+    return res.status(400).json({ error: 'Rango de fechas inválido' });
+  }
+
+  /* Base: búsqueda + rango createdAt (para contadores byStatus y totalVal). */
+  const whereBase = {};
+  if (q) {
+    whereBase.OR = [
+      { userName: { contains: q } },
+      { phone: { contains: q } },
+      { id: { contains: q } }
+    ];
+  }
+  if (from || to) {
+    whereBase.createdAt = { gte: new Date(from + 'T00:00:00'), lte: new Date(to + 'T23:59:59.999') };
+  }
+  /* Con el filtro de pestaña (estado) para el paginado real. */
+  const whereStatus = { ...whereBase };
+  if (status && status !== 'todos') whereStatus.status = status;
+
+  const offset = (page - 1) * limit;
+  let items;
+
+  if (sort === 'estado') {
+    /* Orden por flujo de negocio resuelto 100% en SQL antes de paginar,
+       con desempate estable (createdAt DESC, id DESC). */
+    const conds = [];
+    if (status && status !== 'todos') conds.push(Prisma.sql`"status" = ${status}`);
+    if (from || to) {
+      conds.push(Prisma.sql`"createdAt" >= ${new Date(from + 'T00:00:00')}`);
+      conds.push(Prisma.sql`"createdAt" <= ${new Date(to + 'T23:59:59.999')}`);
+    }
+    if (q) {
+      const like = `%${q.toLowerCase()}%`;
+      conds.push(Prisma.sql`(LOWER("userName") LIKE ${like} OR LOWER("phone") LIKE ${like} OR LOWER("id") LIKE ${like})`);
+    }
+    const whereSql = conds.length ? Prisma.sql`WHERE ${Prisma.join(conds, ' AND ')}` : Prisma.empty;
+    const rows = await prisma.$queryRaw(Prisma.sql`
+      SELECT "id" FROM "Order"
+      ${whereSql}
+      ORDER BY CASE "status"
+        WHEN 'pendiente' THEN 0 WHEN 'confirmado' THEN 1
+        WHEN 'enviado' THEN 2 WHEN 'entregado' THEN 3
+        WHEN 'cancelado' THEN 4 ELSE 5 END,
+        "createdAt" DESC, "id" DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+    const ids = rows.map((r) => r.id);
+    if (ids.length) {
+      const fetched = await prisma.order.findMany({ where: { id: { in: ids } }, include: { items: true } });
+      const byId = new Map(fetched.map((o) => [o.id, o]));
+      items = ids.map((id) => byId.get(id)).filter(Boolean);
+    } else {
+      items = [];
+    }
+  } else {
+    const orderBy = sort === 'total'
+      ? [{ total: 'desc' }, { id: 'desc' }]
+      : [{ createdAt: 'desc' }, { id: 'desc' }];
+    items = await prisma.order.findMany({
+      where: whereStatus,
+      orderBy,
+      skip: offset,
+      take: limit,
+      include: { items: true }
+    });
+  }
+
+  const [total, totalAgg, byStatusRows] = await Promise.all([
+    prisma.order.count({ where: whereStatus }),
+    prisma.order.aggregate({ where: whereBase, _sum: { total: true } }),
+    prisma.order.groupBy({ by: ['status'], where: whereBase, _count: true })
+  ]);
+
+  const byStatus = { pendiente: 0, confirmado: 0, enviado: 0, entregado: 0, cancelado: 0, incidente: 0 };
+  byStatusRows.forEach((r) => { if (byStatus[r.status] !== undefined) byStatus[r.status] = r._count; });
+
+  res.json({
+    items: items.map(serializeOrder),
+    total,
+    page,
+    limit,
+    pages: Math.ceil(total / limit),
+    totalVal: totalAgg._sum.total || 0,
+    byStatus
   });
-  res.json(orders.map(serializeOrder));
 }
 
 async function updateOrderStatus(req, res) {
