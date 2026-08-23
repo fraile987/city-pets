@@ -124,6 +124,7 @@ app.use('/api/pets', require('./src/routes/pets'));
 app.use('/api/orders', require('./src/routes/orders'));
 app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/upload', require('./src/routes/upload'));
+app.use('/api/settings', require('./src/routes/settings'));
 
 /* ---------- 404 y errores (siempre JSON, sin stack en producción) ---------- */
 app.use('/api', (req, res) => {

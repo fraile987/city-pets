@@ -11,6 +11,7 @@
   let productsCache = [];
   let ordersCache = [];
   let attributionCache = null;
+  let settingsCache = { deliveryCost: 10000, freeDeliveryFrom: 100000 };
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -21,6 +22,7 @@
     bindProducts();
     bindAdminFilters();
     bindImport();
+    bindSettings();
     bindOrders();
     bindIncidents();
     bindConfirm();
@@ -96,14 +98,16 @@
 
   async function refreshAll() {
     try {
-      const [products, orders, attribution] = await Promise.all([
+      const [products, orders, attribution, settings] = await Promise.all([
         api('/products', { auth: false }),
         api('/admin/orders'),
-        api('/admin/attribution')
+        api('/admin/attribution'),
+        api('/settings', { auth: false })
       ]);
       productsCache = products;
       ordersCache = orders;
       attributionCache = attribution;
+      settingsCache = settings || settingsCache;
       renderAll();
     } catch (e) {
       toast(e.message || 'No se pudieron cargar los datos', 'error');
@@ -117,6 +121,36 @@
     renderOrdersTable();
     renderIncidents();
     renderAttribution();
+    renderSettings();
+  }
+
+  /* ---------- Configuración de domicilio (D3) ---------- */
+  function renderSettings() {
+    const s = settingsCache || {};
+    $('#setDeliveryCost').value = s.deliveryCost ?? 10000;
+    $('#setFreeFrom').value = s.freeDeliveryFrom ?? 100000;
+    $('#setExplanation').textContent = s.freeDeliveryFrom > 0
+      ? `Las compras iguales o superiores a ${fmtMoney(s.freeDeliveryFrom)} tienen domicilio gratis.`
+      : 'No hay promoción automática de domicilio gratis por monto.';
+  }
+
+  function bindSettings() {
+    $('#btnSaveSettings').addEventListener('click', async () => {
+      const deliveryCost = parseInt($('#setDeliveryCost').value, 10);
+      const freeDeliveryFrom = parseInt($('#setFreeFrom').value, 10);
+      if (isNaN(deliveryCost) || deliveryCost < 0 || isNaN(freeDeliveryFrom) || freeDeliveryFrom < 0) {
+        toast('El costo y el umbral deben ser números enteros >= 0', 'error');
+        return;
+      }
+      try {
+        const data = await api('/admin/settings', { method: 'PUT', body: { deliveryCost, freeDeliveryFrom } });
+        settingsCache = data;
+        renderSettings();
+        toast('Configuración de domicilio guardada', 'success');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
   }
 
   /* ---------- Estado de stock (F4) ---------- */

@@ -22,7 +22,7 @@
     bindConfirm();
     bindTools();
     renderFeedbackList();
-    await Promise.all([initSession(), loadProducts()]);
+    await Promise.all([initSession(), loadProducts(), loadStoreSettings()]);
     refreshSessionUI();
     refreshProfileView();
     normalizeCart();
@@ -309,14 +309,30 @@
       return { p, qty: c.qty };
     }).filter(i => i.p);
     const subtotal = items.reduce((s, i) => s + i.p.price * i.qty, 0);
-    return { items, subtotal, delivery: subtotal > 0 ? DELIVERY_COST : 0, total: subtotal + (subtotal > 0 ? DELIVERY_COST : 0) };
+    const delivery = computeDelivery(subtotal);
+    return { items, subtotal, delivery, total: subtotal + delivery };
+  }
+
+  /* Muestra "GRATIS" cuando el envío está exento y hay artículos. */
+  function deliveryDisplay(delivery, subtotal) {
+    return delivery === 0 && subtotal > 0 ? 'GRATIS' : fmtMoney(delivery);
+  }
+
+  function freeDeliveryMsg(subtotal) {
+    const hint = freeDeliveryHint(subtotal);
+    if (!hint) return '';
+    return hint.ok
+      ? '🎉 ¡Tu domicilio es gratis!'
+      : `Agrega ${fmtMoney(hint.need)} más para obtener domicilio gratis 🚚`;
   }
 
   function renderCart() {
     const { items, subtotal, delivery, total } = cartTotals();
     $('#cartCount').textContent = items.reduce((s, i) => s + i.qty, 0);
     $('#cartSubtotal').textContent = fmtMoney(subtotal);
+    $('#cartDelivery').textContent = deliveryDisplay(delivery, subtotal);
     $('#cartTotal').textContent = fmtMoney(total);
+    $('#cartFreeMsg').innerHTML = items.length ? freeDeliveryMsg(subtotal) : '';
     const body = $('#cartBody');
     if (!items.length) {
       body.innerHTML = `<div class="ta-center muted mt-4">Tu carrito está vacío.<br/>Explora la tienda 🐾</div>`;
@@ -376,12 +392,14 @@
   let checkoutBusy = false;
 
   function openCheckout(user) {
-    const { subtotal, total } = cartTotals();
+    const { subtotal, delivery, total } = cartTotals();
     computedDelivery = getNextDeliverySlot();
     $('#checkoutUserInfo').innerHTML = `
       <strong>${esc(user.name)}</strong><br/>
       <span class="muted">📱 ${esc(user.phone)} · ✉️ ${esc(user.email)}</span>`;
     $('#coSubtotal').textContent = fmtMoney(subtotal);
+    $('#coDelivery').textContent = deliveryDisplay(delivery, subtotal);
+    $('#coFreeMsg').innerHTML = freeDeliveryMsg(subtotal);
     $('#coTotal').textContent = fmtMoney(total);
 
     /* Franja auto-programada según regla logística */

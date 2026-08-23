@@ -8,7 +8,6 @@ const STORE = {
   feedback: 'cp_feedback'
 };
 
-const DELIVERY_COST = 8000;
 const CHANNELS = ['Instagram', 'Facebook', 'WhatsApp', 'TikTok', 'Google', 'Referido', 'Directo'];
 
 /* Imagen local mostrada cuando un producto no tiene imagen (B4). */
@@ -62,6 +61,50 @@ async function uploadFile(path, file) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Error al subir el archivo');
   return data;
+}
+
+/* ============ Configuración global (domicilio) ============
+   Se carga desde /api/settings. Defaults iguales a los del backend
+   por si la API aún no responde. La regla de cálculo es única. */
+const storeSettings = { deliveryCost: 10000, freeDeliveryFrom: 100000 };
+
+function setStoreSettings(s) {
+  if (s && typeof s.deliveryCost === 'number' && typeof s.freeDeliveryFrom === 'number') {
+    storeSettings.deliveryCost = s.deliveryCost;
+    storeSettings.freeDeliveryFrom = s.freeDeliveryFrom;
+  }
+}
+
+function getStoreSettings() {
+  return { ...storeSettings };
+}
+
+async function loadStoreSettings() {
+  try {
+    const s = await api('/settings', { auth: false });
+    setStoreSettings(s);
+  } catch { /* se conservan los valores por defecto */ }
+}
+
+/* Regla única de domicilio (espejo del backend):
+   - subtotal <= 0                          -> 0
+   - freeDeliveryFrom > 0 y subtotal >= ... -> 0 (gratis)
+   - freeDeliveryFrom = 0                   -> sin promoción: se cobra
+   - caso contrario                         -> deliveryCost */
+function computeDelivery(subtotal) {
+  if (subtotal <= 0) return 0;
+  const from = storeSettings.freeDeliveryFrom;
+  if (from > 0 && subtotal >= from) return 0;
+  return storeSettings.deliveryCost;
+}
+
+/* Cuánto falta (o si ya cumple) para el envío gratis. null si no hay promoción. */
+function freeDeliveryHint(subtotal) {
+  const from = storeSettings.freeDeliveryFrom;
+  if (from <= 0) return null;
+  if (subtotal <= 0) return { need: from, ok: false };
+  if (subtotal >= from) return { need: 0, ok: true };
+  return { need: from - subtotal, ok: false };
 }
 
 /* Franjas horarias */

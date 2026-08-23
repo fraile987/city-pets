@@ -7,8 +7,8 @@
 
 const prisma = require('../db');
 const { MAX } = require('../constants');
+const { getStoreSettings, computeDelivery } = require('./settings');
 
-const DELIVERY_COST = 8000;
 const MAX_QTY = 100;
 
 /* ---- Regla logística replicada del prototipo (js/data.js) ---- */
@@ -146,9 +146,11 @@ async function createOrder(req, res) {
     lineItems.push({ product: p, qty: n.qty });
   }
 
-  /* Cálculos del lado del servidor (nunca del cliente). */
+  /* Cálculos del lado del servidor (nunca del cliente). El costo del
+     domicilio sale de la configuración persistida (StoreSettings). */
   const subtotal = lineItems.reduce((s, i) => s + i.product.price * i.qty, 0);
-  const delivery = subtotal > 0 ? DELIVERY_COST : 0;
+  const settings = await getStoreSettings();
+  const delivery = computeDelivery(subtotal, settings);
   const total = subtotal + delivery;
   const slot = getNextDeliverySlot();
 

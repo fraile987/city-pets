@@ -74,6 +74,19 @@
           <div class="kpi-sub" id="kpiIncidentsUsers">0 usuarios no cumplieron</div>
         </div>
       </div>
+      <div class="panel" id="settingsPanel">
+        <div class="panel-header">
+          <h3>🚚 Configuración de domicilio</h3>
+          <span class="badge badge-navy">Checkout</span>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>Costo de domicilio</label><input id="setDeliveryCost" type="number" min="0" /></div>
+          <div class="field grow"><label>Compra mínima para domicilio gratis</label><input id="setFreeFrom" type="number" min="0" /></div>
+        </div>
+        <p class="muted" id="setExplanation" style="font-size:.85rem"></p>
+        <button class="btn btn-navy" id="btnSaveSettings">Guardar configuración</button>
+      </div>
+
       <div class="row">
         <div class="panel grow">
           <h3 class="mb-3">Atribución por canal</h3>

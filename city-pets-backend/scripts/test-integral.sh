@@ -1263,4 +1263,64 @@ fi
 curl -s -o /dev/null -X DELETE "$B/products/$GPID" -H "Authorization: Bearer $TANA"
 curl -s -o /dev/null -X DELETE "$B/products/$XID" -H "Authorization: Bearer $TANA"
 check "limpieza G23 completa" "$(body_of "$(curl -s "$B/products")" | json 'j.some(p=>p.id==="'$GPID'" || p.id==="'$XID'")')" "false"
+
+echo ""
+echo "===== G24. Fase D1-D6: configuracion de domicilio (envio gratis) ====="
+# --- config estatica ---
+if grep -q 'model StoreSettings' prisma/schema.prisma && grep -q 'deliveryCost' prisma/schema.prisma; then
+  ok "schema: StoreSettings (deliveryCost/freeDeliveryFrom)"
+else
+  ko "schema: falta StoreSettings"
+fi
+grep -q "app.use('/api/settings'" server.js && ok "server: /api/settings montado" || ko "server: /api/settings no montado"
+grep -q "router.put('/settings', updateSettings)" src/routes/admin.js && ok "admin: PUT /settings" || ko "admin: falta PUT /settings"
+grep -q 'getStoreSettings' src/controllers/orders.js && grep -q 'computeDelivery' src/controllers/orders.js && ok "orders: usa settings centralizadas" || ko "orders: no usa settings"
+grep -q 'loadStoreSettings' ../js/app.js && grep -q 'computeDelivery' ../js/app.js && ok "app.js: carga settings y calcula delivery" || ko "app.js: sin settings"
+grep -q 'setDeliveryCost' ../admin.html && grep -q 'btnSaveSettings' ../admin.html && ok "admin.html: tarjeta de domicilio" || ko "admin.html: falta tarjeta"
+grep -q 'renderSettings' ../js/admin.js && grep -q 'bindSettings' ../js/admin.js && ok "admin.js: render+guardar settings" || ko "admin.js: sin settings"
+# --- GET publico ---
+GS=$(curl -s -w '|%{http_code}' "$B/settings")
+check "GET settings 200" "$(code_of "$GS")" "200"
+check "deliveryCost default 10000" "$(body_of "$GS" | json 'j.deliveryCost')" "10000"
+check "freeDeliveryFrom default 100000" "$(body_of "$GS" | json 'j.freeDeliveryFrom')" "100000"
+# --- validaciones y autorizacion ---
+check "PUT negativo 400" "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":-1,"freeDeliveryFrom":100}')" "400"
+check "PUT user normal 403" "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$B/admin/settings" -H "Authorization: Bearer $TBOB" -H 'Content-Type: application/json' -d '{"deliveryCost":10000,"freeDeliveryFrom":100000}')" "403"
+# --- producto dedicado para pruebas de orden ---
+R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"G24 Delivery","species":"Perros","price":50000,"stock":1000}')
+GD=$(body_of "$R" | json 'j.id')
+check "producto G24 creado" "$(code_of "$R")" "201"
+# --- delivery normal (subtotal < umbral) ---
+curl -s -o /dev/null -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":10000,"freeDeliveryFrom":100000}'
+R=$(curl -s -w '|%{http_code}' -X POST "$B/orders" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"items\":[{\"productId\":\"$GD\",\"qty\":1}],\"address\":\"G24\",\"payment\":{\"method\":\"digital\"}}")
+check "subtotal 50000<umbral: delivery=10000" "$(body_of "$R" | json 'j.delivery')" "10000"
+check "total=60000" "$(body_of "$R" | json 'j.total')" "60000"
+# --- gratis al alcanzar el umbral (==) ---
+curl -s -o /dev/null -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":10000,"freeDeliveryFrom":50000}'
+R=$(curl -s -w '|%{http_code}' -X POST "$B/orders" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"items\":[{\"productId\":\"$GD\",\"qty\":1}],\"address\":\"G24\",\"payment\":{\"method\":\"digital\"}}")
+check "subtotal==umbral: delivery=0" "$(body_of "$R" | json 'j.delivery')" "0"
+# --- gratis por encima del umbral ---
+curl -s -o /dev/null -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":10000,"freeDeliveryFrom":30000}'
+R=$(curl -s -w '|%{http_code}' -X POST "$B/orders" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"items\":[{\"productId\":\"$GD\",\"qty\":2}],\"address\":\"G24\",\"payment\":{\"method\":\"digital\"}}")
+check "subtotal 100000>umbral: delivery=0" "$(body_of "$R" | json 'j.delivery')" "0"
+# --- freeDeliveryFrom = 0 (sin promocion por monto) ---
+curl -s -o /dev/null -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":10000,"freeDeliveryFrom":0}'
+R=$(curl -s -w '|%{http_code}' -X POST "$B/orders" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"items\":[{\"productId\":\"$GD\",\"qty\":1}],\"address\":\"G24\",\"payment\":{\"method\":\"digital\"}}")
+check "freeFrom=0: delivery=10000" "$(body_of "$R" | json 'j.delivery')" "10000"
+# --- deliveryCost = 0 ---
+curl -s -o /dev/null -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":0,"freeDeliveryFrom":100000}'
+R=$(curl -s -w '|%{http_code}' -X POST "$B/orders" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"items\":[{\"productId\":\"$GD\",\"qty\":1}],\"address\":\"G24\",\"payment\":{\"method\":\"digital\"}}")
+check "deliveryCost=0: delivery=0" "$(body_of "$R" | json 'j.delivery')" "0"
+# --- persistencia tras reiniciar el server ---
+curl -s -o /dev/null -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":8000,"freeDeliveryFrom":90000}'
+kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
+node server.js > /tmp/citypets-integral-server.log 2>&1 &
+SERVER_PID=$!
+sleep 2
+GS=$(curl -s -w '|%{http_code}' "$B/settings")
+check "settings persisten tras reinicio (8000/90000)" "$(body_of "$GS" | json 'j.deliveryCost'):$(body_of "$GS" | json 'j.freeDeliveryFrom')" "8000:90000"
+# --- restaurar defaults y limpiar ---
+curl -s -o /dev/null -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":10000,"freeDeliveryFrom":100000}'
+curl -s -o /dev/null -X DELETE "$B/products/$GD" -H "Authorization: Bearer $TANA"
+check "producto G24 limpiado" "$(body_of "$(curl -s "$B/products")" | json 'j.some(p=>p.id===v)' "$GD")" "false"
 [ "$FAIL" -eq 0 ]
