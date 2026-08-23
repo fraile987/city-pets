@@ -283,6 +283,9 @@ th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--gr
 th { background: var(--navy-800); color: var(--white); font-size: .8rem; text-transform: uppercase; letter-spacing: .6px; }
 tr:hover td { background: var(--cloud); }
 
+/* Resalta las filas inválidas en la vista previa de importación (Fase 2). */
+tr.row-invalid td { background: rgba(229,72,77,.06); }
+
 /* ============ KPI CARDS ============ */
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; margin-bottom: 28px; }
 .kpi {

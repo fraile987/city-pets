@@ -98,15 +98,16 @@
           <h3>Acciones</h3>
           <div class="row">
             <button class="btn btn-gold btn-sm" id="btnNewProduct">+ Producto individual</button>
-            <button class="btn btn-navy btn-sm" id="btnDownloadTemplate">Descargar plantilla CSV</button>
-            <label class="btn btn-outline btn-sm" style="cursor:pointer">⬆ Carga masiva CSV
-              <input type="file" id="csvInput" accept=".csv,text/csv" class="hidden" />
+            <button class="btn btn-navy btn-sm" id="btnDownloadTemplate">⬇ Plantilla Excel (.xlsx)</button>
+            <label class="btn btn-outline btn-sm" style="cursor:pointer">⬆ Carga masiva Excel
+              <input type="file" id="xlsxInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" />
             </label>
           </div>
         </div>
         <p class="muted" style="font-size:.85rem">
-          CSV: <code>name,species,category,price,unit,grams,stock,desc,dailyRation,tags</code><br/>
-          species: Perros | Gatos | General · tags separadas por ";"
+          Importación Excel con validación por fila y vista previa. Cada columna va en una celda:
+          <code>Nombre | Especie | Categoría | Precio | Unidad | Gramos | Stock | Descripción | Ración diaria | Tags</code><br/>
+          Especie: Perros | Gatos | General · Solo se importan las filas válidas; las inválidas se listan en el reporte.
         </p>
       </div>
       <div class="table-wrap">
@@ -257,6 +258,31 @@
       </div>
       <div class="modal-foot">
         <button class="btn btn-outline" data-close-order>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL VISTA PREVIA IMPORTACIÓN EXCEL (Fase 2) ============ -->
+  <div class="modal-backdrop" id="importModal">
+    <div class="modal" style="width:min(880px,100%)">
+      <div class="modal-head">
+        <h3>Vista previa de importación</h3>
+        <button class="ico-close" data-close-import aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="importSummary" class="mb-3"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Fila</th><th>Estado</th><th>Nombre</th><th>Especie</th><th>Categoría</th><th>Precio</th><th>Unidad</th><th>Stock</th><th>Errores</th>
+            </tr></thead>
+            <tbody id="importPreviewRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-import>Cancelar</button>
+        <button class="btn btn-gold" id="btnImportCommit">Importar productos válidos</button>
       </div>
     </div>
   </div>

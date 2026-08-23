@@ -1113,4 +1113,84 @@ if grep -q 'IMG_PLACEHOLDER' ../js/data.js && grep -q 'IMG_PLACEHOLDER' ../js/ap
 else
   ko "B4: falta fallback local de imagen en el frontend"
 fi
+
+echo ""
+echo "===== G22. Fase 2: importacion masiva Excel (plantilla + validacion por fila + vista previa) ====="
+# --- config estatica ---
+if grep -q "require('../controllers/import')" src/routes/admin.js && grep -q "importUpload.single('file')" src/routes/admin.js; then
+  ok "rutas de import conectadas (template/preview/commit)"
+else
+  ko "rutas de import no conectadas"
+fi
+if grep -q '"exceljs"' package.json; then ok "exceljs instalado"; else ko "exceljs ausente en package.json"; fi
+[ -f scripts/gen-test-xlsx.js ] && ok "generador de xlsx de prueba presente" || ko "gen-test-xlsx ausente"
+if grep -q 'importCSV\|parseCSV\|citypets_catalogo.csv' ../js/admin.js ../admin.html; then
+  ko "quedan restos de la importacion CSV antigua"
+else
+  ok "importacion CSV antigua reemplazada por Excel"
+fi
+if grep -q 'btnDownloadTemplate' ../admin.html && grep -q 'xlsxInput' ../admin.html && grep -q 'importModal' ../admin.html; then
+  ok "admin.html: botones y modal de importacion Excel presentes"
+else
+  ko "admin.html: faltan elementos de importacion Excel"
+fi
+if grep -q 'downloadExcelTemplate' ../js/admin.js && grep -q 'importXlsx' ../js/admin.js && grep -q "uploadFile('/admin/import/preview'" ../js/admin.js; then
+  ok "admin.js: flujo plantilla + vista previa + commit"
+else
+  ko "admin.js: flujo de importacion incompleto"
+fi
+if grep -q 'renderImportPreview' ../js/admin.js && grep -q 'btnImportCommit' ../js/admin.js && grep -q 'r.valid' ../js/admin.js; then
+  ok "admin.js: vista previa por fila con estado valido/invalido"
+else
+  ko "admin.js: falta vista previa por fila"
+fi
+# --- autorizacion ---
+check "plantilla sin token 401" "$(curl -s -o /dev/null -w '%{http_code}' "$B/admin/import/template")" "401"
+check "plantilla usuario normal 403" "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TBOB" "$B/admin/import/template")" "403"
+# --- plantilla descargable ---
+TPL=$(curl -s -D /tmp/cp-g22-hdr.txt -o /tmp/cp-g22-template.xlsx -w '%{http_code}' -H "Authorization: Bearer $TANA" "$B/admin/import/template")
+check "plantilla descargada 200" "$TPL" "200"
+CT=$(grep -i '^content-type:' /tmp/cp-g22-hdr.txt | tr -d '\r' | sed 's/^[^:]*:[[:space:]]*//')
+check "plantilla content-type xlsx" "${CT%%;*}" "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+node -e "const s=require('fs').statSync('/tmp/cp-g22-template.xlsx').size; process.exit(s>1000?0:1)" && ok "plantilla con contenido" || ko "plantilla vacia"
+# --- round-trip: subir la plantilla (2 ejemplos validos + 1 invalida) ---
+PV=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-g22-template.xlsx' "$B/admin/import/preview")
+check "preview de plantilla 200" "$(code_of "$PV")" "200"
+check "preview: 3 filas totales" "$(body_of "$PV" | json 'j.summary.total')" "3"
+check "preview: 2 validas" "$(body_of "$PV" | json 'j.summary.valid')" "2"
+check "preview: 1 invalida" "$(body_of "$PV" | json 'j.summary.invalid')" "1"
+check "preview: error por fila presente" "$(body_of "$PV" | json 'j.rows.some(r=>!r.valid && r.errors.length>0)')" "true"
+# --- commit sobre la plantilla (importa solo las validas) ---
+IID=$(body_of "$PV" | json 'j.importId')
+[ -n "$IID" ] && ok "preview genera importId" || ko "sin importId"
+PRE=$(req /products | body_of | json 'j.length')
+CM=$(curl -s -w '|%{http_code}' -X POST "$B/admin/import/commit" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"importId\":\"$IID\"}")
+check "commit 200" "$(code_of "$CM")" "200"
+check "commit crea 2 productos" "$(body_of "$CM" | json 'j.created')" "2"
+check "commit omite 1 invalida" "$(body_of "$CM" | json 'j.skipped.length')" "1"
+check "catalogo crece en 2" "$(req /products | body_of | json 'j.length')" "$((PRE+2))"
+check "importId consumido (recommit 404)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/admin/import/commit" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"importId\":\"$IID\"}")" "404"
+# --- limpiar los productos de ejemplo importados ---
+G22IDS=$(req /products | body_of | json 'j.filter(p=>p.name.includes("(ejemplo)")).map(p=>p.id).join(" ")')
+for PID in $G22IDS; do
+  curl -s -o /dev/null -X DELETE "$B/products/$PID" -H "Authorization: Bearer $TANA"
+done
+check "ejemplos limpiados del catalogo" "$(req /products | body_of | json 'j.some(p=>p.name.includes("(ejemplo)"))')" "false"
+# --- archivo de prueba con validaciones variadas (gen-test-xlsx) ---
+node scripts/gen-test-xlsx.js /tmp/cp-g22-rows.xlsx >/dev/null
+PV2=$(curl -s -w '|%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-g22-rows.xlsx' "$B/admin/import/preview")
+check "preview archivo variado 200" "$(code_of "$PV2")" "200"
+check "variado: 6 filas" "$(body_of "$PV2" | json 'j.summary.total')" "6"
+check "variado: 2 validas" "$(body_of "$PV2" | json 'j.summary.valid')" "2"
+check "variado: 4 invalidas" "$(body_of "$PV2" | json 'j.summary.invalid')" "4"
+check "precio formato colombiano 30.500 -> 30500" "$(body_of "$PV2" | json 'j.rows.find(r=>r.data.name==="Import G22 Gato").data.price')" "30500"
+check "error por nombre vacio" "$(body_of "$PV2" | json 'j.rows.filter(r=>!r.valid).flatMap(r=>r.errors).some(e=>e.includes("El nombre es obligatorio"))')" "true"
+check "error por especie invalida" "$(body_of "$PV2" | json 'j.rows.filter(r=>r.data.name==="Import G22 Mal")[0].errors[0].includes("especie")')" "true"
+check "error por precio no numerico" "$(body_of "$PV2" | json 'j.rows.filter(r=>r.data.name==="Import G22 Precio")[0].errors.some(e=>e.includes("número"))')" "true"
+check "error por precio negativo" "$(body_of "$PV2" | json 'j.rows.filter(r=>r.data.name==="Import G22 Negativo")[0].errors.some(e=>e.includes("negativo"))')" "true"
+# --- archivo invalido (no es xlsx) ---
+printf 'no soy excel' > /tmp/cp-g22-fake.xlsx
+check "archivo no xlsx 400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-g22-fake.xlsx' "$B/admin/import/preview")" "400"
+# --- limpiar los productos variados (no se importan: quedan 0 en BD) ---
+check "variado: nada importado (commit no ejecutado)" "$(req /products | body_of | json 'j.some(p=>p.name.startsWith("Import G22"))')" "false"
 [ "$FAIL" -eq 0 ]

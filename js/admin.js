@@ -19,6 +19,7 @@
     bindLogout();
     bindTabs();
     bindProducts();
+    bindImport();
     bindOrders();
     bindIncidents();
     bindConfirm();
@@ -185,14 +186,12 @@
       openModal();
     });
 
-    $('#btnDownloadTemplate').addEventListener('click', downloadTemplate);
+    $('#btnDownloadTemplate').addEventListener('click', downloadExcelTemplate);
 
-    $('#csvInput').addEventListener('change', (e) => {
+    $('#xlsxInput').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => importCSV(ev.target.result);
-      reader.readAsText(file);
+      importXlsx(file);
       e.target.value = '';
     });
 
@@ -313,75 +312,107 @@
     }
   }
 
-  function downloadTemplate() {
-    const header = 'name,species,category,price,unit,grams,stock,desc,dailyRation,tags';
-    const rows = productsCache.map(p => `${csv(p.name)},${csv(p.species)},${csv(p.category)},${p.price},${csv(p.unit)},${p.grams},${p.stock},${csv(p.desc)},${p.dailyRation},${csv(p.tags.join(';'))}`);
-    const blob = new Blob(['\uFEFF' + [header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'citypets_catalogo.csv';
-    a.click();
-  }
+  /* ---------- Importación Excel (Fase 2): plantilla + vista previa + commit ---------- */
+  let importId = null;
+  let importRows = [];
 
-  function csv(v) {
-    v = String(v ?? '');
-    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-  }
-
-  function parseCSV(text) {
-    const rows = [];
-    let cur = '', row = [], inQ = false;
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (inQ) {
-        if (ch === '"') {
-          if (text[i + 1] === '"') { cur += '"'; i++; }
-          else inQ = false;
-        } else cur += ch;
-      } else {
-        if (ch === '"') inQ = true;
-        else if (ch === ',') { row.push(cur); cur = ''; }
-        else if (ch === '\n' || ch === '\r') {
-          if (ch === '\r' && text[i + 1] === '\n') i++;
-          if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
-          cur = ''; row = [];
-        } else cur += ch;
-      }
-    }
-    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
-    return rows;
-  }
-
-  async function importCSV(text) {
-    const rows = parseCSV(text);
-    if (rows.length < 2) { toast('CSV vacío', 'error'); return; }
-    const hdr = rows[0].map(h => h.trim().toLowerCase());
-    const idx = (k) => hdr.indexOf(k);
-    let added = 0;
-    const pending = [];
-    rows.slice(1).forEach(r => {
-      const get = (k) => { const i = idx(k); return i >= 0 ? (r[i] || '').trim() : ''; };
-      const name = get('name');
-      if (!name) return;
-      pending.push({
-        name,
-        species: get('species') || 'General',
-        category: get('category') || 'General',
-        price: parseFloat(get('price')) || 0,
-        unit: get('unit') || '1 und',
-        grams: parseInt(get('grams')) || 0,
-        stock: parseInt(get('stock')) || 0,
-        desc: get('desc'),
-        dailyRation: parseInt(get('dailyration')) || 0,
-        tags: get('tags').split(';').map(t => t.trim().toLowerCase()).filter(Boolean),
-        images: []
+  async function downloadExcelTemplate() {
+    try {
+      const res = await fetch('/api/admin/import/template', {
+        headers: { Authorization: 'Bearer ' + getToken() }
       });
-    });
-    for (const body of pending) {
-      try { await api('/products', { method: 'POST', body }); added++; } catch { /* fila inválida: se omite */ }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'No se pudo descargar la plantilla');
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'citypets_plantilla_inventario.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Plantilla Excel descargada');
+    } catch (e) {
+      toast(e.message, 'error');
     }
-    toast(`✅ ${added} producto(s) cargado(s)`, 'success');
-    await refreshAll();
+  }
+
+  async function importXlsx(file) {
+    if (!/\.xlsx$/i.test(file.name)) {
+      toast('El archivo debe tener extensión .xlsx', 'error');
+      return;
+    }
+    try {
+      const data = await uploadFile('/admin/import/preview', file);
+      importId = data.importId;
+      importRows = Array.isArray(data.rows) ? data.rows : [];
+      renderImportPreview(data);
+      $('#importModal').classList.add('open');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  function renderImportPreview(data) {
+    const s = data.summary || { total: 0, valid: 0, invalid: 0 };
+    $('#importSummary').innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <strong>${esc(data.fileName || 'inventario.xlsx')}</strong>
+          <span class="muted" style="margin-left:8px">· ${s.total} fila${s.total === 1 ? '' : 's'}</span>
+        </div>
+        <div class="row">
+          <span class="badge badge-green">✔ ${s.valid} válida${s.valid === 1 ? '' : 's'}</span>
+          <span class="badge ${s.invalid ? 'badge-red' : 'badge-gold'}">${s.invalid ? '✘ ' : ''}${s.invalid} inválida${s.invalid === 1 ? '' : 's'}</span>
+        </div>
+      </div>
+      ${s.invalid ? '<p class="muted" style="font-size:.8rem;margin-top:8px">Las filas inválidas no se importarán y se omitirán.</p>' : ''}`;
+
+    $('#importPreviewRows').innerHTML = importRows.map(r => {
+      const d = r.data || {};
+      const errs = Array.isArray(r.errors) && r.errors.length
+        ? r.errors.map(err => `<div style="color:var(--red-500)">• ${esc(err)}</div>`).join('')
+        : '';
+      return `
+        <tr class="${r.valid ? '' : 'row-invalid'}">
+          <td class="ta-center">${r.row}</td>
+          <td>${r.valid ? '<span class="badge badge-green">✔ Válida</span>' : '<span class="badge badge-red">✘ Inválida</span>'}</td>
+          <td><strong>${esc(d.name || '—')}</strong></td>
+          <td>${esc(d.species || '—')}</td>
+          <td>${esc(d.category || '—')}</td>
+          <td class="money">${fmtMoney(d.price)}</td>
+          <td>${esc(d.unit || '—')}</td>
+          <td class="ta-center">${d.stock}</td>
+          <td style="font-size:.8rem">${errs || '<span class="muted">OK</span>'}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="9" class="ta-center muted">Sin filas para mostrar.</td></tr>';
+
+    const btn = $('#btnImportCommit');
+    btn.disabled = s.valid === 0;
+    btn.textContent = s.valid ? `Importar ${s.valid} producto${s.valid === 1 ? '' : 's'}` : 'Sin filas válidas';
+  }
+
+  function closeImportModal() {
+    importId = null;
+    importRows = [];
+    $('#importModal').classList.remove('open');
+  }
+
+  function bindImport() {
+    document.querySelectorAll('[data-close-import]').forEach(b =>
+      b.addEventListener('click', closeImportModal));
+    $('#btnImportCommit').addEventListener('click', async () => {
+      if (!importId) return;
+      try {
+        const data = await api('/admin/import/commit', { method: 'POST', body: { importId } });
+        closeImportModal();
+        const skip = Array.isArray(data.skipped) ? data.skipped.length : 0;
+        toast(`✅ ${data.created} producto(s) importado(s)${skip ? ` · ${skip} omitido(s) por errores` : ''}`, 'success');
+        await refreshAll();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
   }
 
   /* ---------- Confirmación de borrado (admin) ---------- */
