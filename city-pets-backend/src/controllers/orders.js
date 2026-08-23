@@ -74,6 +74,34 @@ function serializeOrder(o) {
   };
 }
 
+/* ---------- Huella determinista de la intención (P6.2) ----------
+   Compara la intención de compra usando datos históricos (items, address,
+   payment), NUNCA precios enviados por el cliente. La intención NO incluye
+   precios ni stock actuales. */
+function intentFromRequest(normalized, address, payMethod, denomination) {
+  const items = normalized.map((it) => `${it.productId}:${it.qty}`).sort().join('|');
+  return [items, (address || '').trim(), `${payMethod}:${denomination}`].join('||');
+}
+
+function intentFromOrder(o) {
+  const items = o.items
+    .map((i) => `${i.productId || '#' + i.name}:${i.qty}`)
+    .sort()
+    .join('|');
+  const pay = parseJson(o.payment, { method: 'digital' });
+  const payMethod = pay.method === 'efectivo' ? 'efectivo' : 'digital';
+  const denomination = parseInt(pay.denomination, 10) || 0;
+  return [items, (o.address || '').trim(), `${payMethod}:${denomination}`].join('||');
+}
+
+/* Devuelve el pedido existente por (userId, clientOrderKey) o null. */
+function findByIdempotencyKey(userId, key) {
+  return prisma.order.findUnique({
+    where: { userId_clientOrderKey: { userId, clientOrderKey: key } },
+    include: { items: true }
+  });
+}
+
 async function listOrders(req, res) {
   const orders = await prisma.order.findMany({
     where: { userId: req.user.id },
@@ -86,6 +114,15 @@ async function listOrders(req, res) {
 
 async function createOrder(req, res) {
   const { items, address, payment } = req.body;
+  let clientOrderKey = req.body && req.body.clientOrderKey;
+
+  /* Clave de idempotencia opcional (P6.2): clave única por intención. */
+  if (clientOrderKey !== undefined && clientOrderKey !== null) {
+    if (typeof clientOrderKey !== 'string' || clientOrderKey.trim() === '' || clientOrderKey.trim().length > 128) {
+      return res.status(400).json({ error: 'clientOrderKey debe ser una cadena de 1 a 128 caracteres' });
+    }
+    clientOrderKey = clientOrderKey.trim();
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'El pedido debe incluir al menos un producto' });
@@ -126,6 +163,18 @@ async function createOrder(req, res) {
     method: payMethod,
     denomination: denomination || 0
   });
+
+  /* Idempotencia (P6.2): si ya existe un pedido para (userId, clientOrderKey),
+     se devuelve el original si la intención coincide; si difiere, 409. */
+  if (clientOrderKey) {
+    const existing = await findByIdempotencyKey(req.user.id, clientOrderKey);
+    if (existing) {
+      if (intentFromOrder(existing) === intentFromRequest(normalized, address, payMethod, denomination)) {
+        return res.status(200).json(serializeOrder(existing));
+      }
+      return res.status(409).json({ error: 'La clave de pedido ya fue utilizada para una intención diferente' });
+    }
+  }
 
   const productIds = normalized.map((n) => n.productId);
   const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
@@ -190,7 +239,8 @@ async function createOrder(req, res) {
           deliveryDate: slot.deliveryDate,
           deliveryLabel: slot.dateLabel,
           payment: paymentSerialized,
-          status: 'pendiente'
+          status: 'pendiente',
+          clientOrderKey: clientOrderKey || undefined
         },
         include: { items: true }
       });
@@ -200,6 +250,18 @@ async function createOrder(req, res) {
   } catch (e) {
     if (e.message && e.message.startsWith('Stock insuficiente')) {
       return res.status(400).json({ error: e.message });
+    }
+    /* Concurrencia (P6.2): otra solicitud con la misma clave creó el pedido.
+       La transacción (incluido el descuento de stock) se revierte. Se recupera
+       el pedido existente y se devuelve si la intención coincide. */
+    if (e.code === 'P2002' && clientOrderKey) {
+      const existing = await findByIdempotencyKey(req.user.id, clientOrderKey);
+      if (existing) {
+        if (intentFromOrder(existing) === intentFromRequest(normalized, address, payMethod, denomination)) {
+          return res.status(200).json(serializeOrder(existing));
+        }
+        return res.status(409).json({ error: 'La clave de pedido ya fue utilizada para una intención diferente' });
+      }
     }
     throw e;
   }

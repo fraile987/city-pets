@@ -415,6 +415,21 @@
   let selectedPay = 'efectivo';
   let computedDelivery = null;
   let checkoutBusy = false;
+  /* Idempotencia (P6.2): clave única por intención de compra. */
+  let pendingCheckoutKey = null;
+  let pendingCheckoutFingerprint = null;
+
+  function newClientKey() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'cp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10) + '_' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function checkoutFingerprint(items, address, payMethod, denom) {
+    const sorted = items.map(i => `${i.p.id}:${i.qty}`).sort().join('|');
+    return `${sorted}||${address.trim()}||${payMethod}:${denom}`;
+  }
 
   function openCheckout(user) {
     const { subtotal, delivery, total } = cartTotals();
@@ -491,6 +506,18 @@
     const address = $('#checkoutAddress').value.trim();
     if (!address) { toast('Indica la dirección de entrega', 'error'); return; }
 
+    const payMethod = selectedPay === 'efectivo' ? 'efectivo' : 'digital';
+    const denom = payMethod === 'efectivo' ? (parseInt($('#cashDenom').value || 0, 10) || 0) : 0;
+
+    /* Idempotencia (P6.2): se reutiliza la misma clave mientras la intención
+       no cambie (mismo carrito + dirección + pago). Nueva clave al cambiar
+       la intención o tras completar el pedido. */
+    const fp = checkoutFingerprint(items, address, payMethod, denom);
+    if (!pendingCheckoutKey || pendingCheckoutFingerprint !== fp) {
+      pendingCheckoutKey = newClientKey();
+      pendingCheckoutFingerprint = fp;
+    }
+
     checkoutBusy = true;
     const btn = $('#btnConfirmOrder');
     const originalLabel = btn.textContent;
@@ -500,14 +527,17 @@
     const payload = {
       items: items.map(i => ({ productId: i.p.id, qty: i.qty })),
       address,
-      payment: selectedPay === 'efectivo'
-        ? { method: 'efectivo', denomination: parseInt($('#cashDenom').value || 0, 10) }
-        : { method: 'digital' }
+      payment: payMethod === 'efectivo'
+        ? { method: 'efectivo', denomination: denom }
+        : { method: 'digital' },
+      clientOrderKey: pendingCheckoutKey
     };
 
     try {
       const order = await api('/orders', { method: 'POST', body: payload });
       App.cart = [];
+      pendingCheckoutKey = null;
+      pendingCheckoutFingerprint = null;
       closeModals();
       $('#cartDrawer').classList.remove('open');
       renderCart();

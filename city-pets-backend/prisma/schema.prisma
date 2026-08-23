@@ -60,24 +60,27 @@ model Product {
 }
 
 model Order {
-  id            String      @id @default(cuid())
-  user          User        @relation(fields: [userId], references: [id])
-  userId        String
-  userName      String
-  phone         String
-  address       String
-  items         OrderItem[]
-  subtotal      Int
-  delivery      Int
-  total         Int
-  createdAt     DateTime    @default(now())
-  slotGenerated String
-  deliverySlot  String
-  deliveryDate  String
-  deliveryLabel String
-  payment       String
-  status        String      @default("pendiente")
-  deliveredAt   DateTime?
+  id             String      @id @default(cuid())
+  user           User        @relation(fields: [userId], references: [id])
+  userId         String
+  userName       String
+  phone          String
+  address        String
+  items          OrderItem[]
+  subtotal       Int
+  delivery       Int
+  total          Int
+  createdAt      DateTime    @default(now())
+  slotGenerated  String
+  deliverySlot   String
+  deliveryDate   String
+  deliveryLabel  String
+  payment        String
+  status         String      @default("pendiente")
+  deliveredAt    DateTime?
+  clientOrderKey String?
+
+  @@unique([userId, clientOrderKey])
 }
 
 model OrderItem {
