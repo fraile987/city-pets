@@ -1,8 +1,12 @@
 /* =========================================================
    CITY PETS — Logger estructurado (una línea JSON por evento)
-   Evita loguear cuerpos de peticiones ni secretos. Para errores
-   registra err.message y err.code (no el stack ni objetos anidados).
+   Seguridad: SOLO se serializan las claves de contexto incluidas
+   en la allowlist. Cualquier otro dato (tokens, contraseñas,
+   cuerpos de peticiones, objetos arbitrarios) se ignora.
    ========================================================= */
+
+/* Claves adicionales permitidas en el contexto (además de err). */
+const ALLOWED_CTX_KEYS = ['path', 'method'];
 
 function serialize(level, msg, ctx) {
   const entry = { level, time: new Date().toISOString(), msg };
@@ -11,8 +15,7 @@ function serialize(level, msg, ctx) {
       entry.errMessage = ctx.err.message;
       if (ctx.err.code !== undefined) entry.errCode = ctx.err.code;
     }
-    Object.keys(ctx).forEach((k) => {
-      if (k === 'err') return;
+    ALLOWED_CTX_KEYS.forEach((k) => {
       const v = ctx[k];
       if (v !== undefined && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) {
         entry[k] = v;
