@@ -7,6 +7,9 @@ const prisma = require('../db');
 const { ORDER_STATUSES, ORDER_TRANSITIONS } = require('../constants');
 const { serializeOrder } = require('./orders');
 
+/* Indica que el estado leído quedó obsoleto por un cambio concurrente. */
+class OrderStateConflictError extends Error {}
+
 function parseJson(value, fallback) {
   try {
     const parsed = JSON.parse(value);
@@ -298,14 +301,24 @@ async function updateOrderStatus(req, res) {
 
   try {
     /* Actualización de estado y restauración de stock en UNA transacción
-       atómica. Al cancelar se devuelven las cantidades al inventario.
-       Al entregar se registra la fecha real (deliveredAt), sin sobrescribir. */
+       atómica, con actualización condicional (CAS): la transición solo se
+       aplica si el pedido sigue en el estado leído. Si otro proceso lo
+       cambió de forma concurrente, la transacción se aborta sin efectos. */
     const updateData = { status: target };
     if (target === 'entregado' && !order.deliveredAt) {
       updateData.deliveredAt = new Date();
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      const cas = await tx.order.updateMany({
+        where: { id: order.id, status: current },
+        data: updateData
+      });
+      if (cas.count !== 1) {
+        throw new OrderStateConflictError();
+      }
+
+      /* Solo tras asegurar la transición se restaura el stock (si cancela). */
       if (target === 'cancelado') {
         for (const item of order.items) {
           if (!item.productId) continue; // producto eliminado: se omite
@@ -315,15 +328,18 @@ async function updateOrderStatus(req, res) {
           });
         }
       }
-      return tx.order.update({
+
+      return tx.order.findUnique({
         where: { id: order.id },
-        data: updateData,
         include: { items: true }
       });
     });
 
     res.json(serializeOrder(updated));
   } catch (e) {
+    if (e instanceof OrderStateConflictError) {
+      return res.status(409).json({ error: 'El pedido cambió de estado en otro proceso; vuelve a cargar e intenta de nuevo' });
+    }
     console.error(e);
     res.status(500).json({ error: 'No se pudo actualizar el estado del pedido' });
   }
