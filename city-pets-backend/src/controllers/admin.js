@@ -5,6 +5,7 @@
 
 const prisma = require('../db');
 const { Prisma } = require('@prisma/client');
+const logger = require('../logger');
 const { ORDER_STATUSES, ORDER_TRANSITIONS } = require('../constants');
 const { serializeOrder } = require('./orders');
 
@@ -440,7 +441,7 @@ async function updateOrderStatus(req, res) {
     if (e instanceof OrderStateConflictError) {
       return res.status(409).json({ error: 'El pedido cambió de estado en otro proceso; vuelve a cargar e intenta de nuevo' });
     }
-    console.error(e);
+    logger.error("Actualizar estado del pedido: error", { err: e });
     res.status(500).json({ error: 'No se pudo actualizar el estado del pedido' });
   }
 }

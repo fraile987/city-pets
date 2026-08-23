@@ -6,6 +6,7 @@
    ========================================================= */
 
 const prisma = require('../db');
+const logger = require('../logger');
 
 const DEFAULTS = { deliveryCost: 10000, freeDeliveryFrom: 100000 };
 
@@ -43,7 +44,7 @@ async function getSettings(req, res) {
   try {
     res.json(await getStoreSettings());
   } catch (e) {
-    console.error(e);
+    logger.error("Settings: error", { err: e });
     res.status(500).json({ error: 'No se pudo leer la configuración' });
   }
 }
@@ -66,7 +67,7 @@ async function updateSettings(req, res) {
     });
     res.json({ deliveryCost: s.deliveryCost, freeDeliveryFrom: s.freeDeliveryFrom });
   } catch (e) {
-    console.error(e);
+    logger.error("Settings: error", { err: e });
     res.status(500).json({ error: 'No se pudo guardar la configuración' });
   }
 }

@@ -13,6 +13,7 @@ const ExcelJS = require('exceljs');
 const crypto = require('crypto');
 const prisma = require('../db');
 const { MAX } = require('../constants');
+const logger = require('../logger');
 
 /* ---------- Definición de columnas de la plantilla ---------- */
 const COLUMNS = [
@@ -311,7 +312,7 @@ async function getTemplate(req, res) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(buffer);
   } catch (e) {
-    console.error(e);
+    logger.error("Importación: error", { err: e });
     res.status(500).json({ error: 'No se pudo generar la plantilla' });
   }
 }
@@ -379,7 +380,7 @@ async function commit(req, res) {
     created = entry.rows.filter((r) => r.valid).length;
     entry.rows.filter((r) => !r.valid).forEach((r) => skipped.push({ row: r.row, name: r.data.name || '(sin nombre)', errors: r.errors }));
   } catch (e) {
-    console.error(e);
+    logger.error("Importación: error", { err: e });
     return res.status(500).json({ error: 'Error al importar los productos' });
   }
 

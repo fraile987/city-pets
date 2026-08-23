@@ -39,6 +39,9 @@ if (IS_PROD && (HOST === '0.0.0.0' || HOST === '::')) {
 const app = express();
 app.disable('x-powered-by');
 
+const prisma = require('./src/db');
+const logger = require('./src/logger');
+
 /* ---------- Proxy de confianza (Fase 9.6) ----------
    Detrás de nginx, Express confía SOLO en el proxy inmediato (1) para
    leer X-Forwarded-For y conocer la IP real del cliente. En desarrollo
@@ -114,8 +117,14 @@ app.use(cors({
 app.use(express.json({ limit: '2mb' }));
 
 /* ---------- Rutas ---------- */
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', ip: req.ip });
+app.get('/api/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'ok', ip: req.ip });
+  } catch (e) {
+    logger.error('Health: base de datos no disponible', { err: e });
+    res.status(503).json({ status: 'degraded', db: 'error', ip: req.ip });
+  }
 });
 
 app.use('/api/products', require('./src/routes/products'));
@@ -158,13 +167,38 @@ app.use((err, req, res, next) => {
       : 'Archivo inválido' });
   }
   const status = err.status || err.statusCode || 500;
-  if (status >= 500) console.error(err);
+  if (status >= 500) logger.error('Error interno del servidor', { err, path: req.path, method: req.method });
   res.status(status).json({ error: err.expose && err.message ? err.message : 'Error interno del servidor' });
 });
 
 /* ---------- Arranque ---------- */
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`City Pets API [${NODE_ENV}] escuchando en http://${HOST}:${PORT}`);
 });
+
+/* ---------- Graceful shutdown (P7.3) ---------- */
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`Recibido ${signal}; cerrando servidor...`);
+  const force = setTimeout(() => {
+    logger.error('Cierre forzado por timeout (10s)');
+    process.exit(1);
+  }, 10000);
+  force.unref();
+  server.close(async () => {
+    try {
+      await prisma.$disconnect();
+    } catch (e) {
+      logger.error('Error al desconectar Prisma', { err: e });
+    }
+    clearTimeout(force);
+    logger.info('Servidor cerrado limpiamente');
+    process.exit(0);
+  });
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
