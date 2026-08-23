@@ -185,72 +185,54 @@
     openModal('#productModal');
   }
 
-  /* ---------- Productos destacados (Inicio) ----------
+  /* ---------- Productos destacados (dentro del hero) ----------
      Reutiliza la lógica "destacado" existente (tag 'top'). Se muestran
-     ÚNICAMENTE los productos con tag 'top' de cada especie, sin rellenar
-     con otros productos. Todo viene del catálogo real (API), nunca
-     hardcodeado. */
+     ÚNICAMENTE los productos con tag 'top' de cada especie, integrados
+     en su columna del hero (Perros a la izquierda, Gatos a la derecha).
+     Todo viene del catálogo real (API), nunca hardcodeado. */
   function pickFeatured(species) {
     return App.products.filter(p => p.species === species && p.tags.includes('top'));
   }
 
   function featuredCard(p) {
     const outOfStock = p.stock <= 0;
-    const lowStock = !outOfStock && p.stock <= 15;
-    const perKg = p.grams > 0 ? fmtMoney(Math.round(p.price / p.grams * 1000)) : null;
     return `
-      <article class="card" data-product="${p.id}">
-        <div class="card-media">
+      <article class="pf-card" data-product="${p.id}">
+        <div class="pf-media">
           <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" loading="lazy" />
-          <span class="tag-badge">Destacado</span>
-          ${outOfStock ? '<span class="stock-badge">Agotado</span>' : lowStock ? `<span class="stock-badge">Solo ${p.stock}</span>` : ''}
+          <span class="pf-tag">Destacado</span>
+          ${outOfStock ? '<span class="pf-agotado">Agotado</span>' : ''}
         </div>
-        <div class="card-body">
-          <span class="cat">${esc(p.species)} · ${esc(p.category)}</span>
-          <h3>${esc(p.name)}</h3>
-          <div class="price-row"><span class="price money">${fmtMoney(p.price)}</span><span class="unit">${esc(p.unit)}</span></div>
-          ${perKg ? `<div class="muted" style="font-size:.78rem">${perKg}/kg</div>` : ''}
+        <div class="pf-body">
+          <span class="pf-name">${esc(p.name)}</span>
+          <div class="pf-price-row">
+            <span class="pf-price money">${fmtMoney(p.price)}</span>
+            <span class="pf-unit">${esc(p.unit)}</span>
+          </div>
         </div>
-        <div class="card-footer">
-          <button class="btn btn-gold grow" data-add="${p.id}" ${outOfStock ? 'disabled' : ''}>${outOfStock ? 'Agotado' : `Añadir — ${fmtMoney(p.price)}`}</button>
+        <div class="pf-foot">
+          <button class="btn btn-gold" data-add="${p.id}" ${outOfStock ? 'disabled' : ''}>${outOfStock ? 'Agotado' : 'Añadir'}</button>
           <button class="btn btn-outline" data-view="${p.id}">Ver</button>
         </div>
       </article>`;
   }
 
-  function featuredBlock(species, items) {
+  function featuredPanel(species, items) {
     const isDogs = species === 'Perros';
-    const title = isDogs ? 'Favoritos para Perros' : 'Favoritos para Gatos';
-    const sub = isDogs
-      ? 'Alimento, snacks y juguetes que más eligen nuestros clientes caninos.'
-      : 'Alimento, higiene y rascadores preferidos por nuestros clientes felinos.';
+    const label = isDogs ? '🐕 Destacados para perros' : '🐈 Destacados para gatos';
     const content = items.length
-      ? `<div class="featured-grid">${items.map(featuredCard).join('')}</div>`
-      : `<div class="featured-empty"><p>Próximamente tendremos productos destacados para ${isDogs ? 'perros' : 'gatos'} 🐾</p></div>`;
-    return `
-      <section class="featured-block ${isDogs ? 'featured-dogs' : 'featured-cats'}">
-        <div class="featured-head">
-          <div class="featured-title">
-            <span class="featured-icon">${isDogs ? '🐕' : '🐈'}</span>
-            <div>
-              <span class="eyebrow">Destacados</span>
-              <h2>${title}</h2>
-              <p class="featured-sub">${sub}</p>
-            </div>
-          </div>
-          <button class="btn btn-ghost btn-sm" data-action="go-store" data-species="${species}">Ver tienda →</button>
-        </div>
-        ${content}
-      </section>`;
+      ? `<div class="pf-strip">${items.map(featuredCard).join('')}</div>`
+      : `<div class="pf-empty"><p>Próximamente tendremos productos destacados para ${isDogs ? 'perros' : 'gatos'} 🐾</p></div>`;
+    return `<div class="pf-label">${label}</div>${content}`;
   }
 
   function renderFeatured() {
-    $('#featuredDogs').innerHTML = featuredBlock('Perros', pickFeatured('Perros'));
-    $('#featuredCats').innerHTML = featuredBlock('Gatos', pickFeatured('Gatos'));
+    $('#panelFeaturedDogs').innerHTML = featuredPanel('Perros', pickFeatured('Perros'));
+    $('#panelFeaturedCats').innerHTML = featuredPanel('Gatos', pickFeatured('Gatos'));
   }
 
   function bindFeatured() {
-    const root = $('#featuredRoot');
+    const root = $('#heroSplit');
     if (!root) return;
     root.addEventListener('click', (e) => {
       if (e.target.closest('[data-add]')) return;
