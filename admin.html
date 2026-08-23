@@ -81,7 +81,7 @@
           <span class="badge badge-navy">Solo entregados</span>
         </div>
         <div class="row" style="align-items:flex-end">
-          <div class="field grow" style="max-width:240px;margin-bottom:0">
+          <div class="field" style="max-width:200px;margin-bottom:0">
             <label for="revPeriod">Período</label>
             <select id="revPeriod">
               <option value="diario">Diario</option>
@@ -90,6 +90,15 @@
             </select>
           </div>
           <button class="btn btn-navy" id="btnLoadRevenue">Consultar</button>
+          <div class="field" style="max-width:170px;margin-bottom:0">
+            <label for="revFrom">Desde</label>
+            <input id="revFrom" type="date" />
+          </div>
+          <div class="field" style="max-width:170px;margin-bottom:0">
+            <label for="revTo">Hasta</label>
+            <input id="revTo" type="date" />
+          </div>
+          <button class="btn btn-outline" id="btnRevRange">Consultar rango</button>
           <button class="btn btn-gold" id="btnCloseCash">Realizar cierre de caja</button>
         </div>
         <p class="muted" id="revRange" style="font-size:.85rem;margin-top:10px"></p>
@@ -367,6 +376,7 @@
         <div class="summary-line"><span>Etiqueta de entrega</span><span id="odDeliveryLabel"></span></div>
         <div class="summary-line"><span>Franja u horario</span><span id="odDeliverySlot"></span></div>
         <div class="summary-line"><span>Fecha de entrega</span><span id="odDeliveryDate"></span></div>
+        <div class="summary-line"><span>Fecha real de entrega</span><span id="odDeliveredAt">—</span></div>
 
         <h4 class="mb-3">Pago</h4>
         <div class="summary-line"><span>Método</span><span id="odPayment"></span></div>

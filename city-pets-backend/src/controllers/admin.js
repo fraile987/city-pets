@@ -161,9 +161,12 @@ async function listClosures(req, res) {
   })));
 }
 
-/* ---------- Exportación CSV (P4) ---------- */
+/* ---------- Exportación CSV (P4/P5) ---------- */
 function csvCell(v) {
-  const s = String(v ?? '');
+  let s = String(v ?? '');
+  /* Anti fórmula: evita que Excel/hojas interpreten celdas que empiecen
+     con = + - @ como fórmula (CSV Formula Injection). */
+  if (/^[=+\-@]/.test(s.trim())) s = "'" + s;
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
@@ -175,12 +178,43 @@ function sendCSV(res, filename, rows) {
   res.send('\uFEFF' + csv);
 }
 
+const ORDER_STATUS_SEQ = ['pendiente', 'confirmado', 'enviado', 'entregado', 'cancelado', 'incidente'];
+
 async function exportOrdersCSV(req, res) {
-  const orders = await prisma.order.findMany({ orderBy: { createdAt: 'desc' } });
+  const { q, from, to, status, sort } = req.query;
+
+  const where = {};
+  if (status && status !== 'todos') {
+    if (!ORDER_STATUS_SEQ.includes(status)) {
+      return res.status(400).json({ error: 'Estado inválido' });
+    }
+    where.status = status;
+  }
+  if (from || to) {
+    if (!from || !to || !toDateOnly(from) || !toDateOnly(to) || from > to) {
+      return res.status(400).json({ error: 'Rango de fechas inválido' });
+    }
+    where.createdAt = { gte: new Date(from + 'T00:00:00'), lte: new Date(to + 'T23:59:59.999') };
+  }
+
+  let list = await prisma.order.findMany({ where, orderBy: { createdAt: 'desc' } });
+
+  if (q) {
+    const needle = String(q).trim().toLowerCase();
+    list = list.filter((o) =>
+      (o.userName || '').toLowerCase().includes(needle) ||
+      (o.phone || '').toLowerCase().includes(needle) ||
+      (o.id || '').toLowerCase().includes(needle)
+    );
+  }
+  if (sort === 'total') list = [...list].sort((a, b) => b.total - a.total);
+  else if (sort === 'estado') list = [...list].sort((a, b) => ORDER_STATUS_SEQ.indexOf(a.status) - ORDER_STATUS_SEQ.indexOf(b.status));
+  else list = [...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
   const rows = [
     ['ID', 'Cliente', 'Teléfono', 'Fecha pedido', 'Fecha entrega', 'Estado', 'Subtotal', 'Domicilio', 'Total', 'Método de pago']
   ];
-  orders.forEach((o) => {
+  list.forEach((o) => {
     const pay = parseJson(o.payment, { method: 'digital' });
     rows.push([
       o.id,

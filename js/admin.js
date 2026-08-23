@@ -118,6 +118,7 @@
       attributionCache = attribution;
       settingsCache = settings || settingsCache;
       revenueCache = revenue;
+      revCustomRange = false;
       closuresCache = Array.isArray(closures) ? closures : [];
       renderAll();
     } catch (e) {
@@ -189,7 +190,9 @@
 
     $('#btnCloseConfirm').addEventListener('click', async () => {
       if (!pendingCloseRange) return;
-      const body = { period: pendingCloseRange.period };
+      const body = revCustomRange
+        ? { from: revenueCache.from, to: revenueCache.to }
+        : { period: pendingCloseRange.period };
       try {
         const data = await api('/admin/closures', { method: 'POST', body });
         $('#closureModal').classList.remove('open');
@@ -205,10 +208,26 @@
   }
 
   /* ---------- Recaudo / cierre de caja (P3) ---------- */
+  let revCustomRange = false;
+
   async function loadRevenue() {
+    revCustomRange = false;
     const period = $('#revPeriod').value;
     try {
       revenueCache = await api('/admin/revenue?period=' + encodeURIComponent(period));
+      renderRevenue();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  async function loadRevenueRange() {
+    const from = $('#revFrom').value;
+    const to = $('#revTo').value;
+    if (!from || !to) { toast('Indica desde y hasta para el rango', 'error'); return; }
+    revCustomRange = true;
+    try {
+      revenueCache = await api('/admin/revenue?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to));
       renderRevenue();
     } catch (e) {
       toast(e.message, 'error');
@@ -228,6 +247,7 @@
   function bindRevenue() {
     $('#btnLoadRevenue').addEventListener('click', loadRevenue);
     $('#revPeriod').addEventListener('change', loadRevenue);
+    $('#btnRevRange').addEventListener('click', loadRevenueRange);
   }
 
   /* ---------- Filtros de pedidos (P2.1) ---------- */
@@ -239,8 +259,9 @@
   }
 
   function renderOrderFilters() {
-    const counts = { todos: ordersCache.length, pendiente: 0, confirmado: 0, enviado: 0, entregado: 0, cancelado: 0 };
-    ordersCache.forEach(o => { if (counts[o.status] !== undefined) counts[o.status]++; });
+    const subset = ordersCache.filter(matchesOrderBase);
+    const counts = { todos: subset.length, pendiente: 0, confirmado: 0, enviado: 0, entregado: 0, cancelado: 0 };
+    subset.forEach(o => { if (counts[o.status] !== undefined) counts[o.status]++; });
     $$('#orderFilters [data-ofcount]').forEach(el => {
       el.textContent = counts[el.dataset.ofcount] ?? 0;
     });
@@ -256,39 +277,53 @@
     });
   }
 
-  /* ---------- Búsqueda, fechas y orden de pedidos (P4) ---------- */
+  /* ---------- Búsqueda, fechas y orden de pedidos (P4/P5) ---------- */
+  const ORDER_STATUS_SEQ = { pendiente: 0, confirmado: 1, enviado: 2, entregado: 3, cancelado: 4, incidente: 5 };
   let adminSearch = '';
   let adminDateFrom = '';
   let adminDateTo = '';
   let adminSort = 'fecha';
 
-  function filterOrders() {
-    let list = ordersCache.slice();
-    if (orderFilter !== 'todos') list = list.filter(o => o.status === orderFilter);
+  /* Base: búsqueda (cliente/teléfono/ID) + rango createdAt. El filtro de
+     pestaña (estado) y el orden se aplican después. */
+  function matchesOrderBase(o) {
     if (adminSearch) {
       const q = adminSearch.trim().toLowerCase();
-      list = list.filter(o =>
+      if (!(
         (o.userName || '').toLowerCase().includes(q) ||
         (o.phone || '').toLowerCase().includes(q) ||
         (o.id || '').toLowerCase().includes(q)
-      );
+      )) return false;
     }
     if (adminDateFrom || adminDateTo) {
-      list = list.filter(o => {
-        const d = String(o.createdAt || '').slice(0, 10);
-        if (adminDateFrom && d < adminDateFrom) return false;
-        if (adminDateTo && d > adminDateTo) return false;
-        return true;
-      });
+      const d = String(o.createdAt || '').slice(0, 10);
+      if (adminDateFrom && d < adminDateFrom) return false;
+      if (adminDateTo && d > adminDateTo) return false;
     }
+    return true;
+  }
+
+  function filterOrders() {
+    let list = ordersCache.filter(matchesOrderBase);
+    if (orderFilter !== 'todos') list = list.filter(o => o.status === orderFilter);
     if (adminSort === 'total') {
       list.sort((a, b) => b.total - a.total);
     } else if (adminSort === 'estado') {
-      list.sort((a, b) => (a.status < b.status ? -1 : a.status > b.status ? 1 : 0));
+      list.sort((a, b) => (ORDER_STATUS_SEQ[a.status] ?? 9) - (ORDER_STATUS_SEQ[b.status] ?? 9));
     } else {
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
     return list;
+  }
+
+  function currentOrderExportQuery() {
+    const params = new URLSearchParams();
+    if (adminSearch) params.set('q', adminSearch);
+    if (adminDateFrom) params.set('from', adminDateFrom);
+    if (adminDateTo) params.set('to', adminDateTo);
+    if (orderFilter !== 'todos') params.set('status', orderFilter);
+    params.set('sort', adminSort);
+    return params.toString();
   }
 
   async function downloadCSV(path, filename) {
@@ -311,11 +346,11 @@
   }
 
   function bindOrderTools() {
-    $('#ordSearch').addEventListener('input', () => { adminSearch = $('#ordSearch').value; renderOrdersTable(); });
-    $('#ordFrom').addEventListener('change', () => { adminDateFrom = $('#ordFrom').value; renderOrdersTable(); });
-    $('#ordTo').addEventListener('change', () => { adminDateTo = $('#ordTo').value; renderOrdersTable(); });
+    $('#ordSearch').addEventListener('input', () => { adminSearch = $('#ordSearch').value; renderOrdersTable(); renderOrderFilters(); });
+    $('#ordFrom').addEventListener('change', () => { adminDateFrom = $('#ordFrom').value; renderOrdersTable(); renderOrderFilters(); });
+    $('#ordTo').addEventListener('change', () => { adminDateTo = $('#ordTo').value; renderOrdersTable(); renderOrderFilters(); });
     $('#ordSort').addEventListener('change', () => { adminSort = $('#ordSort').value; renderOrdersTable(); });
-    $('#btnExportOrders').addEventListener('click', () => downloadCSV('/admin/export/orders', 'citypets_pedidos.csv'));
+    $('#btnExportOrders').addEventListener('click', () => downloadCSV('/admin/export/orders?' + currentOrderExportQuery(), 'citypets_pedidos.csv'));
     $('#btnExportClosures').addEventListener('click', () => downloadCSV('/admin/export/closures', 'citypets_cierres.csv'));
   }
 
@@ -786,6 +821,7 @@
       ? '🌅 Mañana (06:00 – 13:00)'
       : o.deliverySlot === 'tarde' ? '🌇 Tarde (13:00 – 22:00)' : (o.deliverySlot || '—');
     $('#odDeliveryDate').textContent = o.deliveryDate ? formatDate(o.deliveryDate) : '—';
+    $('#odDeliveredAt').textContent = o.deliveredAt ? new Date(o.deliveredAt).toLocaleString('es-CO') : '—';
     $('#odPayment').textContent = isCash ? '💵 Efectivo' : '📲 Digital';
     $('#odPaymentExtra').textContent = isCash
       ? (denom > 0 ? `Billete con el que paga: ${fmtMoney(denom)}` : 'Pago en efectivo sin denominación')

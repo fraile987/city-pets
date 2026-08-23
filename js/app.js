@@ -776,6 +776,7 @@
         <div class="row" style="justify-content:space-between;align-items:flex-end">
           <div class="muted" style="font-size:.85rem">
             <div>🛵 Entrega: <strong>${esc(o.deliveryLabel)}</strong> (franja ${o.deliverySlot === 'manana' ? '🌅 Mañana' : '🌇 Tarde'})</div>
+            ${o.status === 'entregado' ? `<div>📦 ${o.deliveredAt ? 'Entregado el ' + new Date(o.deliveredAt).toLocaleDateString('es-CO') : 'Entregado (sin fecha registrada)'}</div>` : ''}
             <div>💳 Pago: ${o.payment.method === 'efectivo' ? 'Efectivo' + (o.payment.denomination ? ` — billete $${o.payment.denomination.toLocaleString('es-CO')}` : ' — sin cambio') : 'Digital (transferencia/datáfono)'}</div>
             <div>📍 ${esc(o.address)}</div>
           </div>
