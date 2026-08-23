@@ -90,6 +90,7 @@
             </select>
           </div>
           <button class="btn btn-navy" id="btnLoadRevenue">Consultar</button>
+          <button class="btn btn-gold" id="btnCloseCash">Realizar cierre de caja</button>
         </div>
         <p class="muted" id="revRange" style="font-size:.85rem;margin-top:10px"></p>
         <div class="kpi-grid" style="margin-top:18px">
@@ -97,6 +98,19 @@
           <div class="kpi"><div class="kpi-label">💵 Efectivo</div><div class="kpi-value" id="revCash">$0</div></div>
           <div class="kpi"><div class="kpi-label">📱 Pagos digitales</div><div class="kpi-value" id="revDigital">$0</div></div>
           <div class="kpi green"><div class="kpi-label">📦 Pedidos entregados</div><div class="kpi-value" id="revCount">0</div></div>
+        </div>
+      </div>
+
+      <div class="panel" id="closuresPanel">
+        <div class="panel-header">
+          <h3>🗂️ Historial de cierres</h3>
+          <span class="badge badge-navy">Snapshot</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha/hora</th><th>Administrador</th><th>Período</th><th>Desde</th><th>Hasta</th><th>Total</th><th>Efectivo</th><th>Digital</th><th>Pedidos</th></tr></thead>
+            <tbody id="closuresList"></tbody>
+          </table>
         </div>
       </div>
 
@@ -351,6 +365,20 @@
       </div>
       <div class="modal-foot">
         <button class="btn btn-outline" data-close-order>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL CONFIRMACIÓN CIERRE DE CAJA (P3.1) ============ -->
+  <div class="modal-backdrop" id="closureModal">
+    <div class="modal">
+      <div class="modal-head"><h3>Realizar cierre de caja</h3><button class="ico-close" data-close-closure aria-label="Cerrar">✕</button></div>
+      <div class="modal-body">
+        <div id="cfCloseBody"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-closure>Cancelar</button>
+        <button class="btn btn-gold" id="btnCloseConfirm">Confirmar cierre</button>
       </div>
     </div>
   </div>

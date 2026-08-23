@@ -58,18 +58,11 @@ function revenueRange(period, from, to) {
   return null;
 }
 
-/* Recaudo: solo pedidos ENTREGADOS en el rango, desglosado por método de pago. */
-async function getRevenue(req, res) {
-  const period = req.query.period;
-  const range = revenueRange(period, req.query.from, req.query.to);
-  if (!range) {
-    return res.status(400).json({ error: 'Período inválido: usa period=diario|quincenal|mensual o from/to (YYYY-MM-DD)' });
-  }
-
+/* Recaudo de pedidos ENTREGADOS dentro de un rango (fotografía). */
+async function computeRevenue(range) {
   const orders = await prisma.order.findMany({
     where: { status: 'entregado', createdAt: { gte: range.from, lte: range.to } }
   });
-
   let total = 0;
   let efectivo = 0;
   let digital = 0;
@@ -79,17 +72,85 @@ async function getRevenue(req, res) {
     if (pay.method === 'efectivo') efectivo += o.total;
     else digital += o.total;
   });
+  return { total, efectivo, digital, cantidadPedidos: orders.length };
+}
+
+/* Recaudo dinámico por período (GET /api/admin/revenue). */
+async function getRevenue(req, res) {
+  const period = req.query.period;
+  const range = revenueRange(period, req.query.from, req.query.to);
+  if (!range) {
+    return res.status(400).json({ error: 'Período inválido: usa period=diario|quincenal|mensual o from/to (YYYY-MM-DD)' });
+  }
+
+  const rev = await computeRevenue(range);
 
   res.json({
-    total,
-    efectivo,
-    digital,
-    cantidadPedidos: orders.length,
+    ...rev,
     period: period || 'rango',
     from: fmtDay(range.from),
     to: fmtDay(range.to),
     periodLabel: range.label
   });
+}
+
+/* Cierre de caja persistente: snapshot del recaudo en un rango. */
+async function createClosure(req, res) {
+  const { period, from, to } = req.body || {};
+  const range = revenueRange(period, from, to);
+  if (!range) {
+    return res.status(400).json({ error: 'Período inválido: usa period=diario|quincenal|mensual o from/to (YYYY-MM-DD)' });
+  }
+  const fromS = fmtDay(range.from);
+  const toS = fmtDay(range.to);
+
+  const existing = await prisma.storeClosure.findFirst({ where: { from: fromS, to: toS } });
+  if (existing) {
+    return res.status(409).json({ error: `Este período ya fue cerrado (${fromS} → ${toS})` });
+  }
+
+  const rev = await computeRevenue(range);
+
+  try {
+    const closure = await prisma.storeClosure.create({
+      data: {
+        adminId: req.user.id,
+        period: period || 'rango',
+        from: fromS,
+        to: toS,
+        total: rev.total,
+        efectivo: rev.efectivo,
+        digital: rev.digital,
+        cantidadPedidos: rev.cantidadPedidos
+      }
+    });
+    res.status(201).json({ ...closure, adminName: req.user.name });
+  } catch (e) {
+    if (e.code === 'P2002') {
+      return res.status(409).json({ error: `Este período ya fue cerrado (${fromS} → ${toS})` });
+    }
+    throw e;
+  }
+}
+
+async function listClosures(req, res) {
+  const closures = await prisma.storeClosure.findMany({
+    include: { admin: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
+  res.json(closures.map((c) => ({
+    id: c.id,
+    adminId: c.adminId,
+    adminName: c.admin ? c.admin.name : '—',
+    period: c.period,
+    from: c.from,
+    to: c.to,
+    total: c.total,
+    efectivo: c.efectivo,
+    digital: c.digital,
+    cantidadPedidos: c.cantidadPedidos,
+    createdAt: c.createdAt
+  })));
 }
 
 async function listAllOrders(req, res) {
@@ -183,4 +244,4 @@ async function listAttribution(req, res) {
   });
 }
 
-module.exports = { listAllOrders, updateOrderStatus, listAttribution, getRevenue };
+module.exports = { listAllOrders, updateOrderStatus, listAttribution, getRevenue, createClosure, listClosures };

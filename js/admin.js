@@ -13,6 +13,7 @@
   let attributionCache = null;
   let settingsCache = { deliveryCost: 10000, freeDeliveryFrom: 100000 };
   let revenueCache = null;
+  let closuresCache = [];
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -27,6 +28,7 @@
     bindOrders();
     bindOrderFilters();
     bindRevenue();
+    bindClosures();
     bindIncidents();
     bindConfirm();
     initSession();
@@ -102,18 +104,20 @@
   async function refreshAll() {
     try {
       const period = $('#revPeriod') ? $('#revPeriod').value : 'diario';
-      const [products, orders, attribution, settings, revenue] = await Promise.all([
+      const [products, orders, attribution, settings, revenue, closures] = await Promise.all([
         api('/products', { auth: false }),
         api('/admin/orders'),
         api('/admin/attribution'),
         api('/settings', { auth: false }),
-        api('/admin/revenue?period=' + encodeURIComponent(period))
+        api('/admin/revenue?period=' + encodeURIComponent(period)),
+        api('/admin/closures')
       ]);
       productsCache = products;
       ordersCache = orders;
       attributionCache = attribution;
       settingsCache = settings || settingsCache;
       revenueCache = revenue;
+      closuresCache = Array.isArray(closures) ? closures : [];
       renderAll();
     } catch (e) {
       toast(e.message || 'No se pudieron cargar los datos', 'error');
@@ -130,6 +134,73 @@
     renderAttribution();
     renderSettings();
     renderRevenue();
+    renderClosures();
+  }
+
+  /* ---------- Cierres de caja persistentes (P3.1) ---------- */
+  let pendingCloseRange = null;
+
+  async function loadClosures() {
+    try {
+      closuresCache = await api('/admin/closures');
+      renderClosures();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  function renderClosures() {
+    const list = closuresCache;
+    $('#closuresList').innerHTML = list.length ? list.map(c => `
+      <tr>
+        <td>${new Date(c.createdAt).toLocaleString('es-CO')}</td>
+        <td>${esc(c.adminName)}</td>
+        <td>${esc(c.period)}</td>
+        <td>${esc(c.from)}</td>
+        <td>${esc(c.to)}</td>
+        <td class="money">${fmtMoney(c.total)}</td>
+        <td class="money">${fmtMoney(c.efectivo)}</td>
+        <td class="money">${fmtMoney(c.digital)}</td>
+        <td class="ta-center">${c.cantidadPedidos}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="9" class="ta-center muted">Aún no hay cierres de caja.</td></tr>';
+  }
+
+  function bindClosures() {
+    $('#btnCloseCash').addEventListener('click', () => {
+      if (!revenueCache) { toast('Consulta primero el recaudo', 'error'); return; }
+      pendingCloseRange = {
+        period: $('#revPeriod').value,
+        from: revenueCache.from,
+        to: revenueCache.to,
+        label: revenueCache.periodLabel
+      };
+      $('#cfCloseBody').innerHTML = `
+        <p>Se guardará una <strong>fotografía histórica</strong> del recaudo de pedidos entregados.</p>
+        <p class="mt-2"><strong>${esc(pendingCloseRange.label)}</strong><br/>
+        <span class="muted">Rango: ${pendingCloseRange.from} → ${pendingCloseRange.to}</span></p>
+        <p class="mt-2">Total: <strong class="money">${fmtMoney(revenueCache.total)}</strong> · Efectivo: ${fmtMoney(revenueCache.efectivo)} · Digital: ${fmtMoney(revenueCache.digital)}</p>`;
+      $('#closureModal').classList.add('open');
+    });
+
+    document.querySelectorAll('[data-close-closure]').forEach(b =>
+      b.addEventListener('click', () => $('#closureModal').classList.remove('open')));
+
+    $('#btnCloseConfirm').addEventListener('click', async () => {
+      if (!pendingCloseRange) return;
+      const body = { period: pendingCloseRange.period };
+      try {
+        const data = await api('/admin/closures', { method: 'POST', body });
+        $('#closureModal').classList.remove('open');
+        pendingCloseRange = null;
+        toast(`Cierre creado: ${fmtMoney(data.total)} (${data.from} → ${data.to})`, 'success');
+        await loadClosures();
+      } catch (e) {
+        $('#closureModal').classList.remove('open');
+        pendingCloseRange = null;
+        toast(e.message, 'error');
+      }
+    });
   }
 
   /* ---------- Recaudo / cierre de caja (P3) ---------- */

@@ -5,7 +5,7 @@
 
 const express = require('express');
 const multer = require('multer');
-const { listAllOrders, updateOrderStatus, listAttribution, getRevenue } = require('../controllers/admin');
+const { listAllOrders, updateOrderStatus, listAttribution, getRevenue, createClosure, listClosures } = require('../controllers/admin');
 const { getTemplate, preview, commit } = require('../controllers/import');
 const { updateSettings } = require('../controllers/settings');
 const { authRequired } = require('../middleware/auth');
@@ -27,5 +27,7 @@ router.get('/orders', listAllOrders);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/attribution', listAttribution);
 router.get('/revenue', getRevenue);
+router.get('/closures', listClosures);
+router.post('/closures', createClosure);
 
 module.exports = router;

@@ -24,6 +24,7 @@ model User {
   orders       Order[]
   feedback     Feedback[]
   attributions Attribution[]
+  closures     StoreClosure[]
 }
 
 model Pet {
@@ -117,4 +118,22 @@ model StoreSettings {
   deliveryCost     Int      @default(10000)
   freeDeliveryFrom Int      @default(100000)
   updatedAt        DateTime @updatedAt
+}
+
+/* Cierre de caja persistente (fotografía del recaudo en un rango).
+   Los valores se guardan tal cual se calcularon: no se recalculan. */
+model StoreClosure {
+  id              String   @id @default(cuid())
+  adminId         String
+  admin           User     @relation(fields: [adminId], references: [id])
+  period          String
+  from            String
+  to              String
+  total           Int
+  efectivo        Int
+  digital         Int
+  cantidadPedidos Int
+  createdAt       DateTime @default(now())
+
+  @@unique([from, to])
 }
