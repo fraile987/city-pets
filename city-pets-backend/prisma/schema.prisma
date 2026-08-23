@@ -77,6 +77,7 @@ model Order {
   deliveryLabel String
   payment       String
   status        String      @default("pendiente")
+  deliveredAt   DateTime?
 }
 
 model OrderItem {

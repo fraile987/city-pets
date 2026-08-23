@@ -58,10 +58,18 @@ function revenueRange(period, from, to) {
   return null;
 }
 
-/* Recaudo de pedidos ENTREGADOS dentro de un rango (fotografía). */
+/* Recaudo de pedidos ENTREGADOS dentro de un rango (fotografía).
+   Criterio de fecha: deliveredAt cuando exista; si el pedido entregado es
+   histórico (deliveredAt null), se usa createdAt como fallback. */
 async function computeRevenue(range) {
   const orders = await prisma.order.findMany({
-    where: { status: 'entregado', createdAt: { gte: range.from, lte: range.to } }
+    where: {
+      status: 'entregado',
+      OR: [
+        { deliveredAt: { gte: range.from, lte: range.to } },
+        { deliveredAt: null, createdAt: { gte: range.from, lte: range.to } }
+      ]
+    }
   });
   let total = 0;
   let efectivo = 0;
@@ -153,6 +161,68 @@ async function listClosures(req, res) {
   })));
 }
 
+/* ---------- Exportación CSV (P4) ---------- */
+function csvCell(v) {
+  const s = String(v ?? '');
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function sendCSV(res, filename, rows) {
+  const csv = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send('\uFEFF' + csv);
+}
+
+async function exportOrdersCSV(req, res) {
+  const orders = await prisma.order.findMany({ orderBy: { createdAt: 'desc' } });
+  const rows = [
+    ['ID', 'Cliente', 'Teléfono', 'Fecha pedido', 'Fecha entrega', 'Estado', 'Subtotal', 'Domicilio', 'Total', 'Método de pago']
+  ];
+  orders.forEach((o) => {
+    const pay = parseJson(o.payment, { method: 'digital' });
+    rows.push([
+      o.id,
+      o.userName,
+      o.phone,
+      o.createdAt.toISOString(),
+      o.deliveredAt ? o.deliveredAt.toISOString() : '',
+      o.status,
+      o.subtotal,
+      o.delivery,
+      o.total,
+      pay.method === 'efectivo' ? 'Efectivo' : 'Digital'
+    ]);
+  });
+  sendCSV(res, 'citypets_pedidos.csv', rows);
+}
+
+async function exportClosuresCSV(req, res) {
+  const closures = await prisma.storeClosure.findMany({
+    include: { admin: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
+  const rows = [
+    ['ID', 'Fecha creación', 'Administrador', 'Período', 'Desde', 'Hasta', 'Total', 'Efectivo', 'Digital', 'Cantidad pedidos']
+  ];
+  closures.forEach((c) => {
+    rows.push([
+      c.id,
+      c.createdAt.toISOString(),
+      c.admin ? c.admin.name : '—',
+      c.period,
+      c.from,
+      c.to,
+      c.total,
+      c.efectivo,
+      c.digital,
+      c.cantidadPedidos
+    ]);
+  });
+  sendCSV(res, 'citypets_cierres.csv', rows);
+}
+
 async function listAllOrders(req, res) {
   const orders = await prisma.order.findMany({
     include: { items: true },
@@ -194,7 +264,13 @@ async function updateOrderStatus(req, res) {
 
   try {
     /* Actualización de estado y restauración de stock en UNA transacción
-       atómica. Al cancelar se devuelven las cantidades al inventario. */
+       atómica. Al cancelar se devuelven las cantidades al inventario.
+       Al entregar se registra la fecha real (deliveredAt), sin sobrescribir. */
+    const updateData = { status: target };
+    if (target === 'entregado' && !order.deliveredAt) {
+      updateData.deliveredAt = new Date();
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       if (target === 'cancelado') {
         for (const item of order.items) {
@@ -207,7 +283,7 @@ async function updateOrderStatus(req, res) {
       }
       return tx.order.update({
         where: { id: order.id },
-        data: { status: target },
+        data: updateData,
         include: { items: true }
       });
     });
@@ -244,4 +320,4 @@ async function listAttribution(req, res) {
   });
 }
 
-module.exports = { listAllOrders, updateOrderStatus, listAttribution, getRevenue, createClosure, listClosures };
+module.exports = { listAllOrders, updateOrderStatus, listAttribution, getRevenue, createClosure, listClosures, exportOrdersCSV, exportClosuresCSV };

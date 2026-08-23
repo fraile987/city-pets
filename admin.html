@@ -104,7 +104,10 @@
       <div class="panel" id="closuresPanel">
         <div class="panel-header">
           <h3>🗂️ Historial de cierres</h3>
-          <span class="badge badge-navy">Snapshot</span>
+          <div class="row">
+            <span class="badge badge-navy">Snapshot</span>
+            <button class="btn btn-outline btn-sm" id="btnExportClosures">⬇ Exportar cierres CSV</button>
+          </div>
         </div>
         <div class="table-wrap">
           <table>
@@ -192,6 +195,21 @@
         <span class="eyebrow">Operación</span>
         <h2>Gestión de pedidos</h2>
         <div class="gold-line"></div>
+      </div>
+      <div class="panel" style="margin-bottom:16px">
+        <div class="row" style="align-items:flex-end">
+          <div class="field grow"><label for="ordSearch">Buscar (cliente, teléfono, ID)</label><input id="ordSearch" type="text" placeholder="Ej: Ana, 300…, cmt…" /></div>
+          <div class="field"><label for="ordFrom">Desde</label><input id="ordFrom" type="date" /></div>
+          <div class="field"><label for="ordTo">Hasta</label><input id="ordTo" type="date" /></div>
+          <div class="field"><label for="ordSort">Ordenar</label>
+            <select id="ordSort">
+              <option value="fecha">Fecha (reciente)</option>
+              <option value="total">Total</option>
+              <option value="estado">Estado</option>
+            </select>
+          </div>
+          <button class="btn btn-navy" id="btnExportOrders">⬇ Exportar pedidos CSV</button>
+        </div>
       </div>
       <div class="tabs" id="orderFilters">
         <button class="tab active" data-ofilter="todos">Todos <span class="badge badge-gold" data-ofcount="todos">0</span></button>
