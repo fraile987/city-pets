@@ -211,6 +211,22 @@ function fmtMoney(n) {
   return '$' + Number(n || 0).toLocaleString('es-CO');
 }
 
+/* Presentación legible del peso de un producto a partir de `grams` (gramos).
+   Fuente de verdad: el campo real `grams` (no duplica nada en la BD).
+   15000 -> 15 kg · 3000 -> 3 kg · 1500 -> 1.5 kg · 500 -> 500 g
+   Devuelve '' si el producto no tiene gramaje válido. */
+function productPresentation(p) {
+  if (!p) return '';
+  const g = typeof p.grams === 'number' ? p.grams : parseInt(p.grams, 10);
+  if (!g || isNaN(g) || g <= 0) return '';
+  if (g >= 1000) {
+    const kg = g / 1000;
+    const s = kg % 1 === 0 ? String(kg) : kg.toFixed(1);
+    return `${s} kg`;
+  }
+  return `${g} g`;
+}
+
 function uid(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }

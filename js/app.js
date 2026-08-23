@@ -178,7 +178,7 @@
         </div>
         <div class="card-body">
           <span class="cat">${esc(p.species)} · ${esc(p.category)}</span>
-          <h3>${esc(p.name)}</h3>
+          <h3>${esc(p.name)}${productPresentation(p) ? ` <span class="muted" style="font-size:.82rem;font-weight:600">· ${productPresentation(p)}</span>` : ''}</h3>
           <p class="desc">${esc(p.desc)}</p>
           <div class="price-row">
             <span class="price money">${fmtMoney(p.price)}</span>
@@ -825,9 +825,10 @@
   /* ---------- Herramientas ---------- */
   function fillCalcSelects() {
     const food = App.products.filter(p => p.grams > 0);
-    const opts = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-ration="${p.dailyRation}">${esc(p.name)} (${esc(p.unit)})</option>`).join('');
+    const label = (p) => `${esc(p.name)} — ${productPresentation(p) || esc(p.unit)}`;
+    const opts = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-ration="${p.dailyRation}">${label(p)}</option>`).join('');
     $('#calcProduct').innerHTML = opts;
-    $('#compProduct').innerHTML = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-price="${p.price}" data-ration="${p.dailyRation}">${esc(p.name)}</option>`).join('');
+    $('#compProduct').innerHTML = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-price="${p.price}" data-ration="${p.dailyRation}">${label(p)}</option>`).join('');
     $('#calcProduct').addEventListener('change', (e) => {
       const o = e.target.selectedOptions[0];
       if (!o) return;
@@ -875,13 +876,18 @@
       const same = $('#compSame').checked;
       const compPrice = parseFloat($('#compPrice').value);
       const compGrams = same ? p.grams : parseFloat($('#compGrams').value) * 1000;
-      const ration = p.dailyRation;
-      if (isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0 || isNaN(ration) || ration <= 0) {
+      const grams = typeof p.grams === 'number' ? p.grams : (parseInt(p.grams, 10) || 0);
+      const ration = typeof p.dailyRation === 'number' ? p.dailyRation : (parseInt(p.dailyRation, 10) || 0);
+      if (isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0) {
         toast('Completa precio y gramaje de la competencia (positivos)', 'error');
         return;
       }
+      if (!grams || grams <= 0) {
+        toast('Este producto no tiene gramaje registrado; no se puede calcular el precio por kg', 'error');
+        return;
+      }
       const cpPrice = p.price;
-      const cpGrams = p.grams;
+      const cpGrams = grams;
       const fmtKg = (g) => `${Number(g / 1000).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg`;
       const cpPerKg = cpPrice / cpGrams * 1000;
       const compPerKg = compPrice / compGrams * 1000;
@@ -893,15 +899,37 @@
       const diffLabel = equal
         ? 'Sin diferencia'
         : `${fmtMoney(Math.round(Math.abs(diff)))}/kg ${cheaper ? 'a favor de City Pets' : 'a favor de la competencia'}`;
-      const annualKg = ration * 365 / 1000;
-      const cpAnnual = cpPerKg * annualKg;
-      const compAnnual = compPerKg * annualKg;
-      const savings = compAnnual - cpAnnual;
-      const savingsLabel = equal
-        ? 'Sin ahorro anual'
-        : cheaper
-          ? `Ahorro anual: ${fmtMoney(Math.round(savings))}`
-          : `${fmtMoney(Math.round(Math.abs(savings)))} más al año`;
+
+      /* La comparación por kg y el veredicto se muestran siempre. El ahorro
+         anual depende de la ración diaria; si no está configurada, se muestra
+         un mensaje claro en lugar de bloquear el resultado. */
+      let annualSection;
+      if (ration > 0) {
+        const annualKg = ration * 365 / 1000;
+        const cpAnnual = cpPerKg * annualKg;
+        const compAnnual = compPerKg * annualKg;
+        const savings = compAnnual - cpAnnual;
+        const savingsLabel = equal
+          ? 'Sin ahorro anual'
+          : cheaper
+            ? `Ahorro anual: ${fmtMoney(Math.round(savings))}`
+            : `${fmtMoney(Math.round(Math.abs(savings)))} más al año`;
+        annualSection = `
+          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
+            <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
+            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Basado en una ración de ${ration} g/día y 365 días de consumo.</div>
+            <div class="summary-line"><span>Consumo anual</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
+            <div class="summary-line"><span>City Pets al año</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
+            <div class="summary-line"><span>Competencia al año</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
+            <div class="summary-line"><span>Ahorro anual</span><span style="font-weight:800;color:${diffColor}">${savingsLabel}</span></div>
+          </div>`;
+      } else {
+        annualSection = `
+          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
+            <div class="muted" style="font-size:.8rem">Este producto no tiene ración diaria configurada; no es posible calcular el ahorro anual. Se muestra solo la comparación por kilogramo.</div>
+          </div>`;
+      }
+
       $('#compResult').innerHTML = `
         <div class="panel" style="background:var(--cloud)">
           <div class="muted" style="font-size:.85rem;margin-bottom:.5rem">${esc(p.name)} · ${esc(p.unit)}${same ? ' — Referencia: mismo producto / mismas características' : ''}</div>
@@ -930,14 +958,7 @@
                   : `⚠️ City Pets es ${pct}% más caro`}
             </div>
           </div>
-          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
-            <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
-            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Basado en una ración de ${ration} g/día y 365 días de consumo.</div>
-            <div class="summary-line"><span>Consumo anual</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
-            <div class="summary-line"><span>City Pets al año</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
-            <div class="summary-line"><span>Competencia al año</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
-            <div class="summary-line"><span>Ahorro anual</span><span style="font-weight:800;color:${diffColor}">${savingsLabel}</span></div>
-          </div>
+          ${annualSection}
         </div>`;
     });
 
