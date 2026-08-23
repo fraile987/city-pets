@@ -6,10 +6,10 @@
    ========================================================= */
 
 const prisma = require('../db');
-const { MAX } = require('../constants');
+const { MAX, ORDER_LIMITS } = require('../constants');
 const { getStoreSettings, computeDelivery } = require('./settings');
 
-const MAX_QTY = 100;
+const MAX_QTY = ORDER_LIMITS.maxQty;
 
 /* ---- Regla logística replicada del prototipo (js/data.js) ---- */
 function getCurrentSlot(date = new Date()) {
@@ -53,9 +53,22 @@ function parseJson(value, fallback) {
   }
 }
 
+/* Entero estricto positivo (P7.1): rechaza decimales, no finitos y
+   strings no numéricos. Acepta números enteros o strings de dígitos. */
 function toPositiveInt(v) {
-  const n = parseInt(v, 10);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  if (typeof v === 'number') return Number.isInteger(v) && v > 0 ? v : null;
+  if (typeof v === 'string' && /^\d+$/.test(v.trim())) {
+    const n = parseInt(v, 10);
+    return n > 0 ? n : null;
+  }
+  return null;
+}
+
+/* Entero estricto no negativo (para denominaciones de efectivo; 0 = sin cambio). */
+function toNonNegInt(v) {
+  if (typeof v === 'number') return Number.isInteger(v) && v >= 0 ? v : null;
+  if (typeof v === 'string' && /^\d+$/.test(v.trim())) return parseInt(v, 10);
+  return null;
 }
 
 /* Forma serializada de un pedido para la API (items + payment como objeto). */
@@ -149,6 +162,11 @@ async function createOrder(req, res) {
     normalized.push({ productId: it.productId, qty });
   }
 
+  /* Límite de líneas por pedido (P7.1): evita payloads abusivos. */
+  if (normalized.length > ORDER_LIMITS.maxItems) {
+    return res.status(400).json({ error: `El pedido no puede tener más de ${ORDER_LIMITS.maxItems} productos` });
+  }
+
   if (typeof address !== 'string' || !address.trim()) {
     return res.status(400).json({ error: 'Indica la dirección de entrega' });
   }
@@ -158,7 +176,10 @@ async function createOrder(req, res) {
 
   /* Normaliza el método de pago (objeto -> String serializado). */
   const payMethod = payment && payment.method === 'efectivo' ? 'efectivo' : 'digital';
-  const denomination = payMethod === 'efectivo' ? toPositiveInt(payment && payment.denomination) : 0;
+  const denomination = payMethod === 'efectivo' ? toNonNegInt(payment && payment.denomination) : 0;
+  if (payMethod === 'efectivo' && (denomination === null || denomination > ORDER_LIMITS.maxCashDenomination)) {
+    return res.status(400).json({ error: 'Denominación de efectivo inválida o excesiva' });
+  }
   const paymentSerialized = JSON.stringify({
     method: payMethod,
     denomination: denomination || 0
@@ -202,6 +223,11 @@ async function createOrder(req, res) {
   const delivery = computeDelivery(subtotal, settings);
   const total = subtotal + delivery;
   const slot = getNextDeliverySlot();
+
+  /* Protección contra valores extremos / no finitos (P7.1). */
+  if (!Number.isFinite(subtotal) || !Number.isFinite(total) || subtotal < 0 || total > ORDER_LIMITS.maxTotal) {
+    return res.status(400).json({ error: `El pedido supera el total máximo permitido (${ORDER_LIMITS.maxTotal})` });
+  }
 
   try {
     const order = await prisma.$transaction(async (tx) => {
