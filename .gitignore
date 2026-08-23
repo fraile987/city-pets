@@ -6,6 +6,9 @@ node_modules/
 *.db-journal
 *.sqlite
 
+# Respaldo SQLite preexistente (no versionar)
+city-pets-backend/prisma/dev.db.before-restore
+
 # Variables de entorno / secretos
 .env
 .env.local
