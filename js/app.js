@@ -754,9 +754,7 @@
         wrap.innerHTML = `<div class="panel ta-center"><p class="muted">Aún no has realizado pedidos.</p><button class="btn btn-gold mt-3" data-nav="tienda">Ir a la tienda</button></div>`;
         return;
       }
-      const statusBadge = (s) => s === 'entregado' ? '<span class="badge badge-green">Entregado</span>'
-        : s === 'incidente' ? '<span class="badge badge-red">Incidente</span>'
-        : '<span class="badge badge-gold">Pendiente por entregar</span>';
+      const statusBadge = (s) => `<span class="badge ${statusInfo(s).cls}">${statusInfo(s).label}</span>`;
 
       wrap.innerHTML = orders.map(o => `
       <div class="panel">

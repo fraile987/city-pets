@@ -208,12 +208,18 @@ check "promote aplica role admin" "$(req /auth/me "$TANA" | body_of | json 'j.us
 R=$(req /admin/orders "$TANA")
 check "admin lista pedidos 200" "$(code_of "$R")" "200"
 check "admin ve 2 pedidos" "$(echo "$R" | body_of | json 'j.length')" "2"
+R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$OID/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"confirmado"}')
+check "admin confirma pedido 200" "$(code_of "$R")" "200"
+R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$OID/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"enviado"}')
+check "admin envia pedido 200" "$(code_of "$R")" "200"
 R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$OID/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"entregado"}')
 check "admin marca entregado 200" "$(code_of "$R")" "200"
 check "cliente ve entregado" "$(req /orders "$TANA" | body_of | json 'j.find(x=>x.id===v).status' "$OID")" "entregado"
 R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$OID/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"cualquiera"}')
 check "estado invalido 400" "$(code_of "$R")" "400"
-R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/zzz/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"entregado"}')
+R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$OID/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"cancelado"}')
+check "entregado no puede cancelarse 400" "$(code_of "$R")" "400"
+R=$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/zzz/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"confirmado"}')
 check "pedido inexistente 404" "$(code_of "$R")" "404"
 R=$(req /admin/attribution "$TANA")
 check "admin atribucion 200" "$(code_of "$R")" "200"
@@ -1071,6 +1077,8 @@ check "10.6: E2E: historial comprador incluye pedido" "$(curl -s http://127.0.0.
 check "10.6: E2E: admin ve el pedido" "$(curl -s http://127.0.0.1:$PX/api/admin/orders -H "Authorization: Bearer $TA20" | json 'j.some(o=>o.id===v)' "$OID")" "true"
 check "10.6: E2E: historial sin auth 401" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PX/api/orders)" "401"
 # ciclo de vida del pedido
+check "10.6: E2E: admin confirma pedido" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "http://127.0.0.1:$PX/api/admin/orders/$OID/status" -H "Authorization: Bearer $TA20" -H 'Content-Type: application/json' -d '{"status":"confirmado"}')" "200"
+check "10.6: E2E: admin envia pedido" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "http://127.0.0.1:$PX/api/admin/orders/$OID/status" -H "Authorization: Bearer $TA20" -H 'Content-Type: application/json' -d '{"status":"enviado"}')" "200"
 check "10.6: E2E: admin marca entregado" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "http://127.0.0.1:$PX/api/admin/orders/$OID/status" -H "Authorization: Bearer $TA20" -H 'Content-Type: application/json' -d '{"status":"entregado"}')" "200"
 check "10.6: E2E: comprador ve entregado" "$(curl -s http://127.0.0.1:$PX/api/orders -H "Authorization: Bearer $TB20" | json 'j.find(o=>o.id===v).status' "$OID")" "entregado"
 # seguridad en runtime (via proxy)
@@ -1323,4 +1331,48 @@ check "settings persisten tras reinicio (8000/90000)" "$(body_of "$GS" | json 'j
 curl -s -o /dev/null -X PUT "$B/admin/settings" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"deliveryCost":10000,"freeDeliveryFrom":100000}'
 curl -s -o /dev/null -X DELETE "$B/products/$GD" -H "Authorization: Bearer $TANA"
 check "producto G24 limpiado" "$(body_of "$(curl -s "$B/products")" | json 'j.some(p=>p.id===v)' "$GD")" "false"
+
+echo ""
+echo "===== G25. Fase P1: estados, transiciones y cancelacion con restauracion de stock ====="
+# --- config estatica ---
+if grep -q 'ORDER_TRANSITIONS' src/constants.js && grep -q 'incidente' src/constants.js; then
+  ok "constants: transiciones + incidente historico"
+else
+  ko "constants: faltan transiciones"
+fi
+if grep -q 'Transición no permitida' src/controllers/admin.js && grep -q 'increment' src/controllers/admin.js; then
+  ok "admin.js: validacion de transiciones + restauracion atomica"
+else
+  ko "admin.js: falta validacion/restauracion"
+fi
+grep -q 'statusInfo' ../js/data.js && grep -q 'nextStatuses' ../js/data.js && ok "data.js: estados y transiciones frontend" || ko "data.js: sin estados"
+grep -q 'data-ostatus' ../js/admin.js && ok "admin.js: botones por transicion" || ko "admin.js: sin botones"
+grep -q 'statusInfo' ../js/app.js && ok "app.js: badge de estado" || ko "app.js: sin badge"
+# --- fixture ---
+R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"G25 P1","species":"Perros","price":10000,"stock":1000}')
+G25P=$(body_of "$R" | json 'j.id')
+R=$(curl -s -w '|%{http_code}' -X POST "$B/orders" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"items\":[{\"productId\":\"$G25P\",\"qty\":2}],\"address\":\"G25\",\"payment\":{\"method\":\"digital\"}}")
+G25O=$(body_of "$R" | json 'j.id')
+check "orden G25 pendiente" "$(body_of "$R" | json 'j.status')" "pendiente"
+S0=$(body_of "$(curl -s "$B/products")" | json "j.find(p=>p.id==='$G25P').stock")
+# --- transiciones no permitidas ---
+check "pendiente->entregado 400" "$(code_of "$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$G25O/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"entregado"}')")" "400"
+check "incidente no asignable 400" "$(code_of "$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$G25O/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"incidente"}')")" "400"
+# --- transiciones permitidas + cancelacion con restauracion ---
+check "pendiente->confirmado 200" "$(code_of "$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$G25O/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"confirmado"}')")" "200"
+check "confirmado->cancelado 200" "$(code_of "$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$G25O/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"cancelado"}')")" "200"
+S1=$(body_of "$(curl -s "$B/products")" | json "j.find(p=>p.id==='$G25P').stock")
+check "stock restaurado tras cancelar" "$S1" "$S0"
+check "re-cancelar idempotente 200" "$(code_of "$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$G25O/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"cancelado"}')")" "200"
+check "stock sin doble incremento" "$(body_of "$(curl -s "$B/products")" | json "j.find(p=>p.id==='$G25P').stock")" "$S1"
+# --- entregado no cancelable ---
+R=$(curl -s -w '|%{http_code}' -X POST "$B/orders" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"items\":[{\"productId\":\"$G25P\",\"qty\":1}],\"address\":\"G25b\",\"payment\":{\"method\":\"digital\"}}")
+G25O2=$(body_of "$R" | json 'j.id')
+curl -s -o /dev/null -X PATCH "$B/admin/orders/$G25O2/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"confirmado"}'
+curl -s -o /dev/null -X PATCH "$B/admin/orders/$G25O2/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"enviado"}'
+curl -s -o /dev/null -X PATCH "$B/admin/orders/$G25O2/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"entregado"}'
+check "entregado->cancelado 400" "$(code_of "$(curl -s -w '|%{http_code}' -X PATCH "$B/admin/orders/$G25O2/status" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"status":"cancelado"}')")" "400"
+# --- limpiar ---
+curl -s -o /dev/null -X DELETE "$B/products/$G25P" -H "Authorization: Bearer $TANA"
+check "producto G25 limpiado" "$(body_of "$(curl -s "$B/products")" | json "j.some(p=>p.id==='$G25P')")" "false"
 [ "$FAIL" -eq 0 ]

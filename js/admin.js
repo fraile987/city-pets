@@ -256,7 +256,7 @@
           <strong style="font-size:.88rem">${esc(o.id)}</strong>
           <div class="muted" style="font-size:.78rem">${esc(o.userName)} · ${fmtMoney(o.total)}</div>
         </div>
-        <span class="badge ${o.status === 'entregado' ? 'badge-green' : o.status === 'incidente' ? 'badge-red' : 'badge-gold'}">${o.status === 'entregado' ? 'Entregado' : o.status === 'incidente' ? 'Incidente' : 'Pendiente'}</span>
+<span class="badge ${statusInfo(o.status).cls}">${statusInfo(o.status).label}</span>
       </div>`).join('') : '<p class="muted">Sin pedidos aún.</p>';
   }
 
@@ -564,7 +564,7 @@
       : `<tr><td colspan="4" class="ta-center muted">Este pedido no tiene productos registrados.</td></tr>`;
     $('#odCustomer').innerHTML = `${esc(o.userName)}<br/><span class="muted" style="font-size:.78rem">📱 ${esc(o.phone)}</span>`;
     $('#odDelivery').textContent = o.deliveryLabel + (o.deliverySlot === 'manana' ? ' (🌅 Mañana)' : ' (🌇 Tarde)');
-    $('#odStatus').textContent = o.status === 'entregado' ? 'Entregado' : o.status === 'incidente' ? 'Incidente' : 'Pendiente';
+    $('#odStatus').textContent = statusInfo(o.status).label;
     $('#odItems').innerHTML = itemsHtml;
     $('#odSubtotal').textContent = fmtMoney(o.subtotal);
     $('#odDeliveryCost').textContent = fmtMoney(o.delivery);
@@ -575,16 +575,14 @@
   /* ---------- Pedidos ---------- */
   function bindOrders() {
     $('#adminOrders').addEventListener('click', async (e) => {
-      const del = e.target.closest('[data-odeliver]');
-      const inc = e.target.closest('[data-oincident]');
+      const st = e.target.closest('[data-ostatus]');
       const det = e.target.closest('[data-odetail]');
       if (det) { openOrderDetail(det.dataset.odetail); return; }
-      if (!del && !inc) return;
-      const id = (del || inc).dataset[inc ? 'oincident' : 'odeliver'];
-      const status = del ? 'entregado' : 'incidente';
+      if (!st) return;
+      const status = st.dataset.ostatus;
       try {
-        await api('/admin/orders/' + id + '/status', { method: 'PATCH', body: { status } });
-        toast(del ? 'Pedido marcado como entregado' : 'Incidencia registrada', 'success');
+        await api('/admin/orders/' + st.dataset.id + '/status', { method: 'PATCH', body: { status } });
+        toast('Pedido actualizado a ' + statusInfo(status).label, 'success');
         await refreshAll();
       } catch (e) {
         toast(e.message, 'error');
@@ -594,35 +592,29 @@
 
   function renderOrdersTable() {
     const orders = ordersCache;
-    $('#adminOrders').innerHTML = orders.map(o => `
+    $('#adminOrders').innerHTML = orders.map(o => {
+      const info = statusInfo(o.status);
+      const actions = nextStatuses(o.status).map(s => `
+        <button class="btn btn-navy btn-sm" data-ostatus="${s}" data-id="${o.id}">${actionLabel(s)}</button>`).join('');
+      return `
       <tr>
         <td><strong>${esc(o.id)}</strong><br/><span class="muted" style="font-size:.75rem">${new Date(o.createdAt).toLocaleString('es-CO')}</span></td>
         <td>${esc(o.userName)}<br/><span class="muted" style="font-size:.75rem">📱 ${esc(o.phone)}</span></td>
         <td class="money">${fmtMoney(o.total)}</td>
         <td>${esc(o.deliveryLabel)}<br/><span class="muted" style="font-size:.75rem">Franja ${o.deliverySlot === 'manana' ? '🌅' : '🌇'}</span></td>
         <td>${o.payment.method === 'efectivo' ? '💵 Efectivo' : '📲 Digital'}</td>
-        <td><span class="badge ${o.status === 'entregado' ? 'badge-green' : o.status === 'incidente' ? 'badge-red' : 'badge-gold'}">${o.status === 'entregado' ? 'Entregado' : o.status === 'incidente' ? 'Incidente' : 'Pendiente'}</span></td>
+        <td><span class="badge ${info.cls}">${info.label}</span></td>
         <td>
-          <button class="btn btn-navy btn-sm" data-odetail="${o.id}">Ver detalle</button>
-          ${o.status !== 'entregado' ? `<button class="btn btn-navy btn-sm" data-odeliver="${o.id}">✓ Entregado</button>` : ''}
-          ${o.status !== 'incidente' ? `<button class="btn btn-outline btn-sm" style="color:var(--red-500);border-color:var(--red-500)" data-oincident="${o.id}">⚠ Incidencia</button>` : ''}
+          <button class="btn btn-outline btn-sm" data-odetail="${o.id}">Ver detalle</button>
+          ${actions}
         </td>
-      </tr>`).join('') || '<tr><td colspan="7" class="ta-center muted">Sin pedidos.</td></tr>';
+      </tr>`;
+    }).join('') || '<tr><td colspan="7" class="ta-center muted">Sin pedidos.</td></tr>';
   }
 
   /* ---------- Incidencias ---------- */
   function bindIncidents() {
-    $('#adminIncidents').addEventListener('click', async (e) => {
-      const btn = e.target.closest('[data-iresolve]');
-      if (!btn) return;
-      try {
-        await api('/admin/orders/' + btn.dataset.iresolve + '/status', { method: 'PATCH', body: { status: 'entregado' } });
-        toast('Incidencia resuelta');
-        await refreshAll();
-      } catch (e) {
-        toast(e.message, 'error');
-      }
-    });
+    /* incidente es histórico: la pestaña solo lo lista, sin acciones. */
   }
 
   function renderIncidents() {
@@ -634,7 +626,7 @@
         <td>${esc(o.phone)}</td>
         <td>${new Date(o.createdAt).toLocaleString('es-CO')}</td>
         <td>No se cumplió con la entrega programada (${esc(o.deliveryLabel)}).</td>
-        <td><button class="btn btn-navy btn-sm" data-iresolve="${o.id}">Resolver</button></td>
+        <td class="muted" style="font-size:.8rem">Histórico · sin transición</td>
       </tr>`).join('') || '<tr><td colspan="6" class="ta-center muted">No hay incidencias registradas. ✔</td></tr>';
   }
 

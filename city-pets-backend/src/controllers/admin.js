@@ -4,7 +4,7 @@
    ========================================================= */
 
 const prisma = require('../db');
-const { ORDER_STATUSES } = require('../constants');
+const { ORDER_STATUSES, ORDER_TRANSITIONS } = require('../constants');
 const { serializeOrder } = require('./orders');
 
 async function listAllOrders(req, res) {
@@ -16,9 +16,14 @@ async function listAllOrders(req, res) {
 }
 
 async function updateOrderStatus(req, res) {
-  const status = req.body && req.body.status;
-  if (!ORDER_STATUSES.includes(status)) {
-    return res.status(400).json({ error: 'Estado no válido: usa pendiente, entregado o incidente' });
+  const target = req.body && req.body.status;
+
+  /* El estado incidente es histórico: no puede asignarse a pedidos nuevos. */
+  if (target === 'incidente') {
+    return res.status(400).json({ error: 'El estado incidente es histórico y no puede asignarse' });
+  }
+  if (!ORDER_STATUSES.includes(target)) {
+    return res.status(400).json({ error: 'Estado no válido' });
   }
 
   const order = await prisma.order.findUnique({
@@ -29,12 +34,43 @@ async function updateOrderStatus(req, res) {
     return res.status(404).json({ error: 'Pedido no encontrado' });
   }
 
-  const updated = await prisma.order.update({
-    where: { id: order.id },
-    data: { status },
-    include: { items: true }
-  });
-  res.json(serializeOrder(updated));
+  const current = order.status;
+
+  /* Idempotente: pedido ya en el estado solicitado (evita doble restauración). */
+  if (current === target) {
+    return res.json(serializeOrder(order));
+  }
+
+  const allowed = ORDER_TRANSITIONS[current] || [];
+  if (!allowed.includes(target)) {
+    return res.status(400).json({ error: `Transición no permitida: ${current} → ${target}` });
+  }
+
+  try {
+    /* Actualización de estado y restauración de stock en UNA transacción
+       atómica. Al cancelar se devuelven las cantidades al inventario. */
+    const updated = await prisma.$transaction(async (tx) => {
+      if (target === 'cancelado') {
+        for (const item of order.items) {
+          if (!item.productId) continue; // producto eliminado: se omite
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.qty } }
+          });
+        }
+      }
+      return tx.order.update({
+        where: { id: order.id },
+        data: { status: target },
+        include: { items: true }
+      });
+    });
+
+    res.json(serializeOrder(updated));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'No se pudo actualizar el estado del pedido' });
+  }
 }
 
 async function listAttribution(req, res) {

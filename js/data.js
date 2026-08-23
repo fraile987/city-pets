@@ -108,6 +108,46 @@ function freeDeliveryHint(subtotal) {
   return { need: from - subtotal, ok: false };
 }
 
+/* ============ Estados de pedido (Fase P1) ============
+   Espejo de src/constants.js para visualizar y ofrecer transiciones.
+   incidente es histórico: se muestra, pero no es asignable. */
+const ORDER_TRANSITIONS = {
+  pendiente: ['confirmado', 'cancelado'],
+  confirmado: ['enviado', 'cancelado'],
+  enviado: ['entregado', 'cancelado'],
+  entregado: [],
+  cancelado: [],
+  incidente: []
+};
+
+const ORDER_STATUS_LABELS = {
+  pendiente: { label: 'Pendiente', cls: 'badge-gold' },
+  confirmado: { label: 'Confirmado', cls: 'badge-navy' },
+  enviado: { label: 'Enviado', cls: 'badge-gold' },
+  entregado: { label: 'Entregado', cls: 'badge-green' },
+  cancelado: { label: 'Cancelado', cls: 'badge-red' },
+  incidente: { label: 'Incidente', cls: 'badge-red' }
+};
+
+function statusInfo(status) {
+  return ORDER_STATUS_LABELS[status] || { label: status, cls: 'badge-gold' };
+}
+
+function nextStatuses(status) {
+  return ORDER_TRANSITIONS[status] || [];
+}
+
+/* Etiqueta corta para el botón de transición. */
+const ORDER_ACTION_LABELS = {
+  confirmado: 'Confirmar',
+  enviado: 'Enviar',
+  entregado: 'Entregar',
+  cancelado: 'Cancelar'
+};
+function actionLabel(status) {
+  return ORDER_ACTION_LABELS[status] || status;
+}
+
 /* Franjas horarias */
 const SLOTS = [
   { id: 'manana', name: 'Mañana', hours: '06:00 – 13:00', dayOffset: 0 },
