@@ -12,6 +12,7 @@
   let ordersCache = [];
   let attributionCache = null;
   let settingsCache = { deliveryCost: 10000, freeDeliveryFrom: 100000 };
+  let revenueCache = null;
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -25,6 +26,7 @@
     bindSettings();
     bindOrders();
     bindOrderFilters();
+    bindRevenue();
     bindIncidents();
     bindConfirm();
     initSession();
@@ -99,16 +101,19 @@
 
   async function refreshAll() {
     try {
-      const [products, orders, attribution, settings] = await Promise.all([
+      const period = $('#revPeriod') ? $('#revPeriod').value : 'diario';
+      const [products, orders, attribution, settings, revenue] = await Promise.all([
         api('/products', { auth: false }),
         api('/admin/orders'),
         api('/admin/attribution'),
-        api('/settings', { auth: false })
+        api('/settings', { auth: false }),
+        api('/admin/revenue?period=' + encodeURIComponent(period))
       ]);
       productsCache = products;
       ordersCache = orders;
       attributionCache = attribution;
       settingsCache = settings || settingsCache;
+      revenueCache = revenue;
       renderAll();
     } catch (e) {
       toast(e.message || 'No se pudieron cargar los datos', 'error');
@@ -124,6 +129,33 @@
     renderIncidents();
     renderAttribution();
     renderSettings();
+    renderRevenue();
+  }
+
+  /* ---------- Recaudo / cierre de caja (P3) ---------- */
+  async function loadRevenue() {
+    const period = $('#revPeriod').value;
+    try {
+      revenueCache = await api('/admin/revenue?period=' + encodeURIComponent(period));
+      renderRevenue();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  function renderRevenue() {
+    const r = revenueCache;
+    if (!r) return;
+    $('#revTotal').textContent = fmtMoney(r.total);
+    $('#revCash').textContent = fmtMoney(r.efectivo);
+    $('#revDigital').textContent = fmtMoney(r.digital);
+    $('#revCount').textContent = r.cantidadPedidos;
+    $('#revRange').textContent = `Período consultado: ${r.periodLabel} (${r.from} → ${r.to})`;
+  }
+
+  function bindRevenue() {
+    $('#btnLoadRevenue').addEventListener('click', loadRevenue);
+    $('#revPeriod').addEventListener('change', loadRevenue);
   }
 
   /* ---------- Filtros de pedidos (P2.1) ---------- */

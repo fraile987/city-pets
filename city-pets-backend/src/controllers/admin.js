@@ -7,6 +7,91 @@ const prisma = require('../db');
 const { ORDER_STATUSES, ORDER_TRANSITIONS } = require('../constants');
 const { serializeOrder } = require('./orders');
 
+function parseJson(value, fallback) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed !== null && typeof parsed === 'object' ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function fmtDay(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function toDateOnly(s) {
+  const d = new Date(s + 'T00:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/* Rango del recaudo. Prioridad: from/to (validados); si no, period
+   (diario | quincenal | mensual). Devuelve { from, to, label } o null. */
+function revenueRange(period, from, to) {
+  const now = new Date();
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const endOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
+  if (from || to) {
+    const f = toDateOnly(from);
+    const t = toDateOnly(to);
+    if (!f || !t || f > t) return null;
+    return { from: startOfDay(f), to: endOfDay(t), label: `${from} → ${to}` };
+  }
+
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  if (period === 'diario') {
+    return { from: startOfDay(now), to: endOfDay(now), label: 'Hoy' };
+  }
+  if (period === 'mensual') {
+    return { from: new Date(y, m, 1), to: endOfDay(new Date(y, m + 1, 0)), label: 'Mes actual' };
+  }
+  if (period === 'quincenal') {
+    const day = now.getDate();
+    if (day <= 15) {
+      return { from: new Date(y, m, 1), to: endOfDay(new Date(y, m, 15)), label: 'Quincena 1–15' };
+    }
+    return { from: new Date(y, m, 16), to: endOfDay(new Date(y, m + 1, 0)), label: 'Quincena 16–fin' };
+  }
+  return null;
+}
+
+/* Recaudo: solo pedidos ENTREGADOS en el rango, desglosado por método de pago. */
+async function getRevenue(req, res) {
+  const period = req.query.period;
+  const range = revenueRange(period, req.query.from, req.query.to);
+  if (!range) {
+    return res.status(400).json({ error: 'Período inválido: usa period=diario|quincenal|mensual o from/to (YYYY-MM-DD)' });
+  }
+
+  const orders = await prisma.order.findMany({
+    where: { status: 'entregado', createdAt: { gte: range.from, lte: range.to } }
+  });
+
+  let total = 0;
+  let efectivo = 0;
+  let digital = 0;
+  orders.forEach((o) => {
+    total += o.total;
+    const pay = parseJson(o.payment, { method: 'digital' });
+    if (pay.method === 'efectivo') efectivo += o.total;
+    else digital += o.total;
+  });
+
+  res.json({
+    total,
+    efectivo,
+    digital,
+    cantidadPedidos: orders.length,
+    period: period || 'rango',
+    from: fmtDay(range.from),
+    to: fmtDay(range.to),
+    periodLabel: range.label
+  });
+}
+
 async function listAllOrders(req, res) {
   const orders = await prisma.order.findMany({
     include: { items: true },
@@ -98,4 +183,4 @@ async function listAttribution(req, res) {
   });
 }
 
-module.exports = { listAllOrders, updateOrderStatus, listAttribution };
+module.exports = { listAllOrders, updateOrderStatus, listAttribution, getRevenue };

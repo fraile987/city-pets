@@ -74,6 +74,32 @@
           <div class="kpi-sub" id="kpiIncidentsUsers">0 usuarios no cumplieron</div>
         </div>
       </div>
+
+      <div class="panel" id="revenuePanel">
+        <div class="panel-header">
+          <h3>💰 Recaudo y cierre de caja</h3>
+          <span class="badge badge-navy">Solo entregados</span>
+        </div>
+        <div class="row" style="align-items:flex-end">
+          <div class="field grow" style="max-width:240px;margin-bottom:0">
+            <label for="revPeriod">Período</label>
+            <select id="revPeriod">
+              <option value="diario">Diario</option>
+              <option value="quincenal">Quincenal</option>
+              <option value="mensual">Mensual</option>
+            </select>
+          </div>
+          <button class="btn btn-navy" id="btnLoadRevenue">Consultar</button>
+        </div>
+        <p class="muted" id="revRange" style="font-size:.85rem;margin-top:10px"></p>
+        <div class="kpi-grid" style="margin-top:18px">
+          <div class="kpi navy"><div class="kpi-label">💰 Total recaudado</div><div class="kpi-value" id="revTotal">$0</div></div>
+          <div class="kpi"><div class="kpi-label">💵 Efectivo</div><div class="kpi-value" id="revCash">$0</div></div>
+          <div class="kpi"><div class="kpi-label">📱 Pagos digitales</div><div class="kpi-value" id="revDigital">$0</div></div>
+          <div class="kpi green"><div class="kpi-label">📦 Pedidos entregados</div><div class="kpi-value" id="revCount">0</div></div>
+        </div>
+      </div>
+
       <div class="panel" id="settingsPanel">
         <div class="panel-header">
           <h3>🚚 Configuración de domicilio</h3>
