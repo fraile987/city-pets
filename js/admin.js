@@ -24,6 +24,7 @@
     bindImport();
     bindSettings();
     bindOrders();
+    bindOrderFilters();
     bindIncidents();
     bindConfirm();
     initSession();
@@ -118,10 +119,37 @@
     renderKPIs();
     renderAlerts();
     renderProductsTable();
+    renderOrderFilters();
     renderOrdersTable();
     renderIncidents();
     renderAttribution();
     renderSettings();
+  }
+
+  /* ---------- Filtros de pedidos (P2.1) ---------- */
+  let orderFilter = 'todos';
+
+  function applyOrderFilter(list) {
+    if (orderFilter === 'todos') return list;
+    return list.filter(o => o.status === orderFilter);
+  }
+
+  function renderOrderFilters() {
+    const counts = { todos: ordersCache.length, pendiente: 0, confirmado: 0, enviado: 0, entregado: 0, cancelado: 0 };
+    ordersCache.forEach(o => { if (counts[o.status] !== undefined) counts[o.status]++; });
+    $$('#orderFilters [data-ofcount]').forEach(el => {
+      el.textContent = counts[el.dataset.ofcount] ?? 0;
+    });
+  }
+
+  function bindOrderFilters() {
+    $('#orderFilters').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ofilter]');
+      if (!b) return;
+      orderFilter = b.dataset.ofilter;
+      $$('#orderFilters .tab').forEach(t => t.classList.toggle('active', t.dataset.ofilter === orderFilter));
+      renderOrdersTable();
+    });
   }
 
   /* ---------- Configuración de domicilio (D3) ---------- */
@@ -591,7 +619,7 @@
   }
 
   function renderOrdersTable() {
-    const orders = ordersCache;
+    const orders = applyOrderFilter(ordersCache);
     $('#adminOrders').innerHTML = orders.map(o => {
       const info = statusInfo(o.status);
       const actions = nextStatuses(o.status).map(s => `

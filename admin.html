@@ -153,6 +153,14 @@
         <h2>Gestión de pedidos</h2>
         <div class="gold-line"></div>
       </div>
+      <div class="tabs" id="orderFilters">
+        <button class="tab active" data-ofilter="todos">Todos <span class="badge badge-gold" data-ofcount="todos">0</span></button>
+        <button class="tab" data-ofilter="pendiente">Pendiente <span class="badge badge-gold" data-ofcount="pendiente">0</span></button>
+        <button class="tab" data-ofilter="confirmado">Confirmado <span class="badge badge-navy" data-ofcount="confirmado">0</span></button>
+        <button class="tab" data-ofilter="enviado">Enviado <span class="badge badge-gold" data-ofcount="enviado">0</span></button>
+        <button class="tab" data-ofilter="entregado">Entregado <span class="badge badge-green" data-ofcount="entregado">0</span></button>
+        <button class="tab" data-ofilter="cancelado">Cancelado <span class="badge badge-red" data-ofcount="cancelado">0</span></button>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>ID</th><th>Cliente</th><th>Total</th><th>Entrega</th><th>Pago</th><th>Estado</th><th>Acciones</th></tr></thead>
