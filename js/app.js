@@ -14,6 +14,7 @@
     bindNavigation();
     bindHero();
     bindStore();
+    bindFeatured();
     bindCart();
     bindCheckout();
     bindProfile();
@@ -27,6 +28,7 @@
     normalizeCart();
     renderCart();
     renderProducts();
+    renderFeatured();
     fillCalcSelects();
     await fillRecommendations();
   }
@@ -169,7 +171,7 @@
     if (!p) return;
     $('#pmTitle').textContent = p.name;
     $('#pmBody').innerHTML = `
-      <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" style="border-radius:10px;aspect-ratio:4/3;object-fit:cover;width:100%" />
+      <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" class="modal-media" />
       <p class="mt-3 muted">${esc(p.species)} · ${esc(p.category)}</p>
       <h3 class="mt-2">${esc(p.name)}</h3>
       <p>${esc(p.desc)}</p>
@@ -181,6 +183,80 @@
       ${p.video ? `<video src="${esc(p.video)}" controls style="width:100%;margin-top:12px;border-radius:10px"></video>` : ''}
       <button class="btn btn-gold btn-block mt-4" data-add="${p.id}">Añadir al carrito — ${fmtMoney(p.price)}</button>`;
     openModal('#productModal');
+  }
+
+  /* ---------- Productos destacados (Inicio) ----------
+     Reutiliza la lógica "destacado" existente (tag 'top'). Se muestran
+     ÚNICAMENTE los productos con tag 'top' de cada especie, sin rellenar
+     con otros productos. Todo viene del catálogo real (API), nunca
+     hardcodeado. */
+  function pickFeatured(species) {
+    return App.products.filter(p => p.species === species && p.tags.includes('top'));
+  }
+
+  function featuredCard(p) {
+    const outOfStock = p.stock <= 0;
+    const lowStock = !outOfStock && p.stock <= 15;
+    const perKg = p.grams > 0 ? fmtMoney(Math.round(p.price / p.grams * 1000)) : null;
+    return `
+      <article class="card" data-product="${p.id}">
+        <div class="card-media">
+          <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" loading="lazy" />
+          <span class="tag-badge">Destacado</span>
+          ${outOfStock ? '<span class="stock-badge">Agotado</span>' : lowStock ? `<span class="stock-badge">Solo ${p.stock}</span>` : ''}
+        </div>
+        <div class="card-body">
+          <span class="cat">${esc(p.species)} · ${esc(p.category)}</span>
+          <h3>${esc(p.name)}</h3>
+          <div class="price-row"><span class="price money">${fmtMoney(p.price)}</span><span class="unit">${esc(p.unit)}</span></div>
+          ${perKg ? `<div class="muted" style="font-size:.78rem">${perKg}/kg</div>` : ''}
+        </div>
+        <div class="card-footer">
+          <button class="btn btn-gold grow" data-add="${p.id}" ${outOfStock ? 'disabled' : ''}>${outOfStock ? 'Agotado' : `Añadir — ${fmtMoney(p.price)}`}</button>
+          <button class="btn btn-outline" data-view="${p.id}">Ver</button>
+        </div>
+      </article>`;
+  }
+
+  function featuredBlock(species, items) {
+    const isDogs = species === 'Perros';
+    const title = isDogs ? 'Favoritos para Perros' : 'Favoritos para Gatos';
+    const sub = isDogs
+      ? 'Alimento, snacks y juguetes que más eligen nuestros clientes caninos.'
+      : 'Alimento, higiene y rascadores preferidos por nuestros clientes felinos.';
+    const content = items.length
+      ? `<div class="featured-grid">${items.map(featuredCard).join('')}</div>`
+      : `<div class="featured-empty"><p>Próximamente tendremos productos destacados para ${isDogs ? 'perros' : 'gatos'} 🐾</p></div>`;
+    return `
+      <section class="featured-block ${isDogs ? 'featured-dogs' : 'featured-cats'}">
+        <div class="featured-head">
+          <div class="featured-title">
+            <span class="featured-icon">${isDogs ? '🐕' : '🐈'}</span>
+            <div>
+              <span class="eyebrow">Destacados</span>
+              <h2>${title}</h2>
+              <p class="featured-sub">${sub}</p>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm" data-action="go-store" data-species="${species}">Ver tienda →</button>
+        </div>
+        ${content}
+      </section>`;
+  }
+
+  function renderFeatured() {
+    $('#featuredDogs').innerHTML = featuredBlock('Perros', pickFeatured('Perros'));
+    $('#featuredCats').innerHTML = featuredBlock('Gatos', pickFeatured('Gatos'));
+  }
+
+  function bindFeatured() {
+    const root = $('#featuredRoot');
+    if (!root) return;
+    root.addEventListener('click', (e) => {
+      if (e.target.closest('[data-add]')) return;
+      const card = e.target.closest('[data-product]');
+      if (card) openProductModal(card.dataset.product);
+    });
   }
 
   /* ---------- Carrito ---------- */
@@ -239,7 +315,7 @@
     }
     body.innerHTML = items.map(i => `
       <div class="cart-item">
-        <img src="${esc(i.p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(i.p.name)}" />
+        <img class="thumb" src="${esc(i.p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(i.p.name)}" />
         <div class="cart-item-info">
           <h4>${esc(i.p.name)}</h4>
           <div class="price-row" style="margin:2px 0">
