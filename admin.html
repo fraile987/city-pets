@@ -278,28 +278,50 @@
 
   <!-- ============ MODAL DETALLE DE PEDIDO (admin) ============ -->
   <div class="modal-backdrop" id="orderModal">
-    <div class="modal">
+    <div class="modal" style="width:min(780px,100%)">
       <div class="modal-head">
         <h3>Detalle del pedido</h3>
         <button class="ico-close" data-close-order aria-label="Cerrar">✕</button>
       </div>
       <div class="modal-body">
-        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px">
           <div>
             <div id="odCustomer" style="font-weight:800"></div>
-            <div class="muted" style="font-size:.82rem;margin-top:4px">🛵 <span id="odDelivery"></span></div>
+            <div class="muted" style="font-size:.82rem;margin-top:4px">📱 <span id="odPhone"></span></div>
+            <div class="muted" style="font-size:.82rem;margin-top:2px">📍 <span id="odAddress"></span></div>
           </div>
           <span class="badge badge-gold" id="odStatus"></span>
         </div>
+        <div class="row muted" style="font-size:.82rem;margin-bottom:16px;gap:14px">
+          <span>🛒 Pedido: <span id="odId"></span></span>
+          <span>📅 Creado: <span id="odCreated"></span></span>
+        </div>
+
+        <h4 class="mb-3">Productos</h4>
         <div class="table-wrap mb-3">
           <table>
-            <thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Subtotal</th></tr></thead>
+            <thead><tr><th>Imagen</th><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Subtotal</th></tr></thead>
             <tbody id="odItems"></tbody>
           </table>
         </div>
-        <div class="summary-line"><span>Subtotal artículos</span><span class="money" id="odSubtotal">$0</span></div>
-        <div class="summary-line"><span>Domicilio</span><span class="money" id="odDeliveryCost">$0</span></div>
-        <div class="summary-line total"><span>Total</span><span class="money" id="odTotal">$0</span></div>
+
+        <h4 class="mb-3">Entrega</h4>
+        <div class="summary-line"><span>Etiqueta de entrega</span><span id="odDeliveryLabel"></span></div>
+        <div class="summary-line"><span>Franja u horario</span><span id="odDeliverySlot"></span></div>
+        <div class="summary-line"><span>Fecha de entrega</span><span id="odDeliveryDate"></span></div>
+
+        <h4 class="mb-3">Pago</h4>
+        <div class="summary-line"><span>Método</span><span id="odPayment"></span></div>
+        <div class="summary-line"><span>Detalle</span><span id="odPaymentExtra"></span></div>
+
+        <div style="background:var(--cloud);border-radius:9px;padding:14px;margin-top:8px">
+          <div class="summary-line"><span>Subtotal artículos</span><span class="money" id="odSubtotal">$0</span></div>
+          <div class="summary-line"><span>Domicilio</span><span class="money" id="odDeliveryCost">$0</span></div>
+          <div class="summary-line total"><span>Total</span><span class="money" id="odTotal">$0</span></div>
+        </div>
+
+        <h4 class="mb-3">Estado y acciones</h4>
+        <div class="row" id="odActions"></div>
       </div>
       <div class="modal-foot">
         <button class="btn btn-outline" data-close-order>Cerrar</button>

@@ -577,6 +577,16 @@
   }
 
   /* ---------- Detalle de pedido (admin) ---------- */
+  async function setOrderStatus(id, status) {
+    try {
+      await api('/admin/orders/' + id + '/status', { method: 'PATCH', body: { status } });
+      toast('Pedido actualizado a ' + statusInfo(status).label, 'success');
+      await refreshAll();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
   function openOrderDetail(id) {
     const o = ordersCache.find(x => x.id === id);
     if (!o) return;
@@ -584,19 +594,45 @@
     const itemsHtml = items.length
       ? items.map(i => `
         <tr>
-          <td>${esc(i.name)}</td>
+          <td><img src="${esc(i.image || IMG_PLACEHOLDER)}" alt="${esc(i.name)}" style="width:40px;height:34px;object-fit:cover;border-radius:6px" /></td>
+          <td><strong>${esc(i.name)}</strong><br/><span class="muted" style="font-size:.72rem">${i.productId ? 'ID: ' + esc(i.productId) : 'Producto histórico (eliminado del catálogo)'}</span></td>
           <td class="ta-center">${i.qty}</td>
           <td class="money">${fmtMoney(i.price)}</td>
           <td class="money">${fmtMoney(i.price * i.qty)}</td>
         </tr>`).join('')
-      : `<tr><td colspan="4" class="ta-center muted">Este pedido no tiene productos registrados.</td></tr>`;
-    $('#odCustomer').innerHTML = `${esc(o.userName)}<br/><span class="muted" style="font-size:.78rem">📱 ${esc(o.phone)}</span>`;
-    $('#odDelivery').textContent = o.deliveryLabel + (o.deliverySlot === 'manana' ? ' (🌅 Mañana)' : ' (🌇 Tarde)');
+      : `<tr><td colspan="5" class="ta-center muted">Este pedido no tiene productos registrados.</td></tr>`;
+
+    const pay = o.payment && typeof o.payment === 'object' ? o.payment : {};
+    const isCash = pay.method === 'efectivo';
+    const denom = parseInt(pay.denomination, 10) || 0;
+
+    $('#odCustomer').textContent = o.userName;
+    $('#odPhone').textContent = o.phone || '—';
+    $('#odAddress').textContent = o.address || '—';
     $('#odStatus').textContent = statusInfo(o.status).label;
+    $('#odStatus').className = 'badge ' + statusInfo(o.status).cls;
+    $('#odId').textContent = o.id;
+    $('#odCreated').textContent = new Date(o.createdAt).toLocaleString('es-CO');
     $('#odItems').innerHTML = itemsHtml;
+    $('#odDeliveryLabel').textContent = o.deliveryLabel || '—';
+    $('#odDeliverySlot').textContent = o.deliverySlot === 'manana'
+      ? '🌅 Mañana (06:00 – 13:00)'
+      : o.deliverySlot === 'tarde' ? '🌇 Tarde (13:00 – 22:00)' : (o.deliverySlot || '—');
+    $('#odDeliveryDate').textContent = o.deliveryDate ? formatDate(o.deliveryDate) : '—';
+    $('#odPayment').textContent = isCash ? '💵 Efectivo' : '📲 Digital';
+    $('#odPaymentExtra').textContent = isCash
+      ? (denom > 0 ? `Billete con el que paga: ${fmtMoney(denom)}` : 'Pago en efectivo sin denominación')
+      : 'Transferencia (Nequi/Daviplata/Bancolombia) o datáfono';
     $('#odSubtotal').textContent = fmtMoney(o.subtotal);
-    $('#odDeliveryCost').textContent = fmtMoney(o.delivery);
+    $('#odDeliveryCost').textContent = (o.delivery === 0 && o.subtotal > 0) ? 'GRATIS' : fmtMoney(o.delivery);
     $('#odTotal').textContent = fmtMoney(o.total);
+
+    const actions = nextStatuses(o.status).map(s => `
+      <button class="btn btn-navy btn-sm" data-ostatus="${s}" data-id="${o.id}">${actionLabel(s)}</button>`).join('');
+    $('#odActions').innerHTML = actions
+      ? `<div class="row">${actions}</div>`
+      : '<p class="muted" style="font-size:.82rem;margin-top:4px">Este pedido no tiene transiciones disponibles.</p>';
+
     $('#orderModal').classList.add('open');
   }
 
@@ -607,14 +643,13 @@
       const det = e.target.closest('[data-odetail]');
       if (det) { openOrderDetail(det.dataset.odetail); return; }
       if (!st) return;
-      const status = st.dataset.ostatus;
-      try {
-        await api('/admin/orders/' + st.dataset.id + '/status', { method: 'PATCH', body: { status } });
-        toast('Pedido actualizado a ' + statusInfo(status).label, 'success');
-        await refreshAll();
-      } catch (e) {
-        toast(e.message, 'error');
-      }
+      await setOrderStatus(st.dataset.id, st.dataset.ostatus);
+    });
+    $('#orderModal').addEventListener('click', async (e) => {
+      const st = e.target.closest('[data-ostatus]');
+      if (!st) return;
+      await setOrderStatus(st.dataset.id, st.dataset.ostatus);
+      openOrderDetail(st.dataset.id);
     });
   }
 
