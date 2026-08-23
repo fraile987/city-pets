@@ -155,6 +155,24 @@ h1, h2, h3, h4 { color: var(--navy-800); line-height: 1.2; }
 /* Scroll individual en modo maximizado */
 .split-panel.scrollable { overflow-y: auto; }
 
+/* Maximizado: entrada suave y destacados en grid responsive que llenan el espacio */
+.hero-split.maximized .split-panel { animation: heroFade .35s ease; }
+.hero-split.maximized .pf-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+  overflow: visible;
+  padding-bottom: 4px;
+  max-width: 1120px;
+  margin-inline: auto;
+}
+.hero-split.maximized .pf-card { flex: initial; width: 100%; min-width: 0; }
+.hero-split.maximized .pf-card .pf-media { aspect-ratio: 16/9; }
+@keyframes heroFade {
+  from { opacity: .35; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ============ INFO BAR (horarios) ============ */
 .info-bar {
   background: linear-gradient(90deg, var(--gold-600), var(--gold-400));

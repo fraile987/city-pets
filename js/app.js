@@ -81,6 +81,29 @@
   }
 
   /* ---------- Hero split screen ---------- */
+  let maximizedPanel = null;
+
+  /* Alterna el control "Maximizar" de cada panel a "Restaurar vista"
+     (y el botón ⤢) según el estado maximizado. */
+  function syncPanelButtons(maximized) {
+    $$('.split-panel').forEach(p => {
+      const isActive = maximized && p.dataset.panel === maximizedPanel;
+      const isDogs = p.dataset.panel === 'dogs';
+      const textBtn = p.querySelector('.panel-actions .btn-gold[data-action]');
+      const iconBtn = p.querySelector('.expand-btn');
+      if (textBtn) {
+        textBtn.dataset.action = isActive ? 'restore' : 'expand';
+        textBtn.textContent = isActive ? 'Restaurar vista' : 'Maximizar';
+      }
+      if (iconBtn) {
+        const label = (isActive ? 'Restaurar ' : 'Maximizar ') + (isDogs ? 'perros' : 'gatos');
+        iconBtn.dataset.action = isActive ? 'restore' : 'expand';
+        iconBtn.setAttribute('aria-label', label);
+        iconBtn.title = label;
+      }
+    });
+  }
+
   function bindHero() {
     const hero = $('#heroSplit');
     document.addEventListener('click', (e) => {
@@ -89,14 +112,18 @@
       const action = btn.dataset.action;
       const panel = btn.dataset.panel;
       if (action === 'expand') {
+        maximizedPanel = panel;
         hero.classList.add('maximized');
         hero.classList.remove('to-cats');
         if (panel === 'cats') hero.classList.add('to-cats');
         $$('.split-panel').forEach(p => p.classList.toggle('scrollable', p.dataset.panel === panel));
+        syncPanelButtons(true);
         toast('Sección maximizada: ' + (panel === 'dogs' ? 'Perros' : 'Gatos'));
       } else if (action === 'restore') {
+        maximizedPanel = null;
         hero.classList.remove('maximized', 'to-cats');
         $$('.split-panel').forEach(p => p.classList.remove('scrollable'));
+        syncPanelButtons(false);
         hero.scrollIntoView({ behavior: 'smooth' });
       } else if (action === 'go-store') {
         setStoreFilter(btn.dataset.species);
