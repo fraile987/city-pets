@@ -171,7 +171,7 @@
       <article class="card" data-product="${p.id}">
         <div class="card-media">
           <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" loading="lazy" />
-          ${p.tags.includes('top') ? '<span class="tag-badge">Destacado</span>' : ''}
+          ${p.featured ? '<span class="tag-badge">⭐ Destacado</span>' : ''}
           <span class="stock-badge">${p.stock} en bodega</span>
         </div>
         <div class="card-body">
@@ -218,7 +218,7 @@
      en su columna del hero (Perros a la izquierda, Gatos a la derecha).
      Todo viene del catálogo real (API), nunca hardcodeado. */
   function pickFeatured(species) {
-    return App.products.filter(p => p.species === species && p.tags.includes('top'));
+    return App.products.filter(p => p.species === species && p.featured);
   }
 
   function featuredCard(p) {
@@ -227,7 +227,7 @@
       <article class="pf-card" data-product="${p.id}">
         <div class="pf-media">
           <img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" alt="${esc(p.name)}" loading="lazy" />
-          <span class="pf-tag">Destacado</span>
+          <span class="pf-tag">⭐ Destacado</span>
           ${outOfStock ? '<span class="pf-agotado">Agotado</span>' : ''}
         </div>
         <div class="pf-body">
@@ -884,10 +884,10 @@
     }
     if (species.length) {
       list = list.filter(p => species.includes(p.species));
-      const pref = list.filter(p => p.tags.includes('top'));
-      if (pref.length) list = pref.concat(list.filter(p => !p.tags.includes('top')));
+      const pref = list.filter(p => p.featured);
+      if (pref.length) list = pref.concat(list.filter(p => !p.featured));
     } else {
-      list = [...list].sort((a, b) => (b.tags.includes('top') ? 1 : 0) - (a.tags.includes('top') ? 1 : 0));
+      list = [...list].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
     }
     const recs = list.slice(0, 6);
     $('#recommendations').innerHTML = recs.length ? recs.map(p => `

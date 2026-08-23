@@ -19,6 +19,7 @@
     bindLogout();
     bindTabs();
     bindProducts();
+    bindAdminFilters();
     bindImport();
     bindOrders();
     bindIncidents();
@@ -111,10 +112,63 @@
 
   function renderAll() {
     renderKPIs();
+    renderAlerts();
     renderProductsTable();
     renderOrdersTable();
     renderIncidents();
     renderAttribution();
+  }
+
+  /* ---------- Estado de stock (F4) ---------- */
+  function productStockState(p) {
+    if (p.stock <= 0) return 'out';
+    const min = p.minStock === undefined ? 10 : p.minStock;
+    return p.stock <= min ? 'low' : 'ok';
+  }
+
+  function renderAlerts() {
+    const out = productsCache.filter(p => p.stock <= 0);
+    const low = productsCache.filter(p => p.stock > 0 && p.stock <= (p.minStock === undefined ? 10 : p.minStock));
+    const ok = productsCache.length - out.length - low.length;
+    $('#alertsCount').textContent = out.length + low.length;
+
+    const item = (icon, title, color, p, showMin) => `
+      <div class="panel" style="margin-bottom:10px;padding:12px 14px;border-left:4px solid ${color}">
+        <div style="font-weight:800;color:${color}">${icon} ${title}</div>
+        <div style="font-size:.9rem;margin-top:4px"><strong>${esc(p.name)}</strong></div>
+        <div class="muted" style="font-size:.85rem">Stock actual: ${p.stock}${showMin ? ' · Stock mínimo: ' + (p.minStock === undefined ? 10 : p.minStock) : ''}</div>
+      </div>`;
+
+    $('#alertsList').innerHTML = (out.length || low.length)
+      ? [
+          ...out.map(p => item('🔴', 'Producto agotado', 'var(--red-500)', p, false)),
+          ...low.map(p => item('⚠️', 'Stock bajo', 'var(--gold-600)', p, true))
+        ].join('') +
+        `<p class="muted" style="font-size:.82rem;margin-top:6px">${ok} producto(s) en estado normal.</p>`
+      : `<p class="muted">✅ Todos los productos están en estado normal (${ok}).</p>`;
+  }
+
+  /* ---------- Filtros rápidos (F5) ---------- */
+  let adminFilter = 'todos';
+
+  function applyAdminFilter(list) {
+    if (adminFilter === 'todos') return list;
+    return list.filter(p => {
+      if (adminFilter === 'featured') return !!p.featured;
+      if (adminFilter === 'low') return p.stock > 0 && p.stock <= (p.minStock === undefined ? 10 : p.minStock);
+      if (adminFilter === 'out') return p.stock <= 0;
+      return true;
+    });
+  }
+
+  function bindAdminFilters() {
+    $('#adminFilters').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-afilter]');
+      if (!b) return;
+      adminFilter = b.dataset.afilter;
+      $$('#adminFilters .tab').forEach(t => t.classList.toggle('active', t.dataset.afilter === adminFilter));
+      renderProductsTable();
+    });
   }
 
   /* ---------- Tabs ---------- */
@@ -179,6 +233,8 @@
       ['#apmName', '#apmCategory', '#apmUnit', '#apmDesc', '#apmTags'].forEach(s => $(s).value = '');
       ['#apmPrice', '#apmGrams', '#apmStock', '#apmRation'].forEach(s => $(s).value = '');
       $('#apmSpecies').value = 'Perros';
+      $('#apmFeatured').checked = false;
+      $('#apmMinStock').value = 10;
       $('#apmImage').value = '';
       $('#apmVideo').value = '';
       $('#apmImagePreview').innerHTML = '';
@@ -212,19 +268,25 @@
   }
 
   function renderProductsTable() {
-    $('#adminProducts').innerHTML = productsCache.map(p => `
+    const list = applyAdminFilter(productsCache);
+    $('#adminProducts').innerHTML = list.map(p => {
+      const state = productStockState(p);
+      const badgeCls = state === 'out' ? 'badge-red' : state === 'low' ? 'badge-gold' : 'badge-green';
+      const stateLabel = state === 'out' ? 'Agotado' : state === 'low' ? 'Stock bajo' : 'Normal';
+      return `
       <tr>
         <td><img src="${esc(p.images[0] || IMG_PLACEHOLDER)}" style="width:52px;height:44px;object-fit:cover;border-radius:6px" /></td>
-        <td><strong>${esc(p.name)}</strong><br/><span class="muted" style="font-size:.78rem">${esc(p.category)} · ${esc(p.unit)}</span></td>
+        <td><strong>${p.featured ? '⭐ ' : ''}${esc(p.name)}</strong><br/><span class="muted" style="font-size:.78rem">${esc(p.category)} · ${esc(p.unit)}</span></td>
         <td>${esc(p.species)}</td>
         <td class="money">${fmtMoney(p.price)}</td>
-        <td><span class="badge ${p.stock <= 10 ? 'badge-red' : p.stock <= 25 ? 'badge-gold' : 'badge-green'}">${p.stock}</span></td>
+        <td><span class="badge ${badgeCls}">${p.stock}</span> <span class="muted" style="font-size:.72rem">${stateLabel}</span></td>
         <td>${p.video ? '📹 + 🖼' : '🖼'}</td>
         <td>
           <button class="btn btn-navy btn-sm" data-edit="${p.id}">Editar</button>
           <button class="btn btn-outline btn-sm" style="color:var(--red-500);border-color:var(--red-500)" data-del="${p.id}">Eliminar</button>
         </td>
-      </tr>`).join('') || `<tr><td colspan="7" class="ta-center muted">Sin productos. Carga el catálogo o crea uno.</td></tr>`;
+      </tr>`;
+    }).join('') || `<tr><td colspan="7" class="ta-center muted">${productsCache.length ? 'Sin productos para este filtro.' : 'Sin productos. Carga el catálogo o crea uno.'}</td></tr>`;
   }
 
   function editProduct(id) {
@@ -239,6 +301,8 @@
     $('#apmGrams').value = p.grams;
     $('#apmStock').value = p.stock;
     $('#apmRation').value = p.dailyRation;
+    $('#apmFeatured').checked = !!p.featured;
+    $('#apmMinStock').value = p.minStock === undefined ? 10 : p.minStock;
     $('#apmDesc').value = p.desc;
     $('#apmTags').value = p.tags.join(';');
     $('#apmImagePreview').innerHTML = `<img src="${p.images[0] || IMG_PLACEHOLDER}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" />`;
@@ -262,7 +326,9 @@
         price, unit: $('#apmUnit').value.trim() || '1 und', grams: parseInt($('#apmGrams').value) || 0,
         stock, desc: $('#apmDesc').value.trim(),
         dailyRation: parseInt($('#apmRation').value) || 0,
-        tags: $('#apmTags').value.split(';').map(t => t.trim().toLowerCase()).filter(Boolean)
+        tags: $('#apmTags').value.split(';').map(t => t.trim().toLowerCase()).filter(Boolean),
+        featured: $('#apmFeatured').checked,
+        minStock: Math.max(0, parseInt($('#apmMinStock').value) || 10)
       };
       try {
         if (id) {

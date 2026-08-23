@@ -53,6 +53,8 @@ model Product {
   images      String       @default("[]")
   video       String       @default("")
   rating      Float        @default(4.0)
+  featured    Boolean      @default(false)
+  minStock    Int          @default(10)
   orderItems  OrderItem[]
 }
 

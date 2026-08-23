@@ -1193,4 +1193,74 @@ printf 'no soy excel' > /tmp/cp-g22-fake.xlsx
 check "archivo no xlsx 400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TANA" -F 'file=@/tmp/cp-g22-fake.xlsx' "$B/admin/import/preview")" "400"
 # --- limpiar los productos variados (no se importan: quedan 0 en BD) ---
 check "variado: nada importado (commit no ejecutado)" "$(req /products | body_of | json 'j.some(p=>p.name.startsWith("Import G22"))')" "false"
+
+echo ""
+echo "===== G23. Fase F1-F8: inventario inteligente (featured + minStock + alertas) ====="
+# --- config estatica ---
+if grep -q 'featured    Boolean' prisma/schema.prisma && grep -q 'minStock    Int' prisma/schema.prisma; then
+  ok "schema: campos featured y minStock"
+else
+  ko "schema: faltan campos featured/minStock"
+fi
+grep -q 'featured' src/controllers/products.js && grep -q 'minStock' src/controllers/products.js && ok "API soporta featured/minStock" || ko "API sin featured/minStock"
+grep -q 'apmFeatured' ../admin.html && grep -q 'apmMinStock' ../admin.html && ok "admin.html: checkbox destacado + campo stock minimo" || ko "admin.html: faltan campos"
+grep -q 'renderAlerts' ../js/admin.js && grep -q 'adminFilters' ../js/admin.js && grep -q 'applyAdminFilter' ../js/admin.js && ok "admin.js: alertas + filtros" || ko "admin.js: sin alertas/filtros"
+grep -q 'Alertas de inventario' ../admin.html && grep -q 'alertsCount' ../js/admin.js && ok "admin: contador de alertas" || ko "admin: sin contador de alertas"
+if grep -q 'p.stock <= 0' ../js/admin.js && grep -q 'p.stock > 0 && p.stock <= (p.minStock' ../js/admin.js; then
+  ok "admin.js: reglas agotado / stock bajo"
+else
+  ko "admin.js: reglas de stock ausentes"
+fi
+grep -q '⭐ Destacado' ../js/app.js && grep -q 'p.featured' ../js/app.js && ok "app.js: badge destacado por featured" || ko "app.js: sin badge featured"
+# --- crear producto destacado con minStock ---
+R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"G23 Destacado","species":"Perros","price":9999,"stock":3,"featured":true,"minStock":5}')
+check "crear con featured+minStock 201" "$(code_of "$R")" "201"
+GPID=$(body_of "$R" | json 'j.id')
+check "featured=true" "$(body_of "$R" | json 'j.featured')" "true"
+check "minStock=5" "$(body_of "$R" | json 'j.minStock')" "5"
+# --- validaciones ---
+check "featured no bool 400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"X","species":"Perros","featured":"si"}')" "400"
+check "minStock negativo 400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"name":"X","species":"Perros","minStock":-1}')" "400"
+check "minStock decimal 400" "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$B/products/$GPID" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"minStock":2.5}')" "400"
+# --- editar destacado y minStock ---
+R=$(curl -s -X PUT "$B/products/$GPID" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"featured":false}')
+check "editar featured=false" "$(body_of "$R" | json 'j.featured')" "false"
+R=$(curl -s -X PUT "$B/products/$GPID" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"featured":true,"minStock":3}')
+check "editar featured=true + minStock=3" "$(body_of "$R" | json 'j.featured')" "true"
+# --- estados de stock (la API expone los datos para las alertas) ---
+R=$(curl -s -X PUT "$B/products/$GPID" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"stock":3}')
+check "stock == minStock (3)" "$(body_of "$R" | json 'j.stock')" "3"
+R=$(curl -s -X PUT "$B/products/$GPID" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"stock":1}')
+check "stock < minStock (1)" "$(body_of "$R" | json 'j.stock')" "1"
+R=$(curl -s -X PUT "$B/products/$GPID" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d '{"stock":0}')
+check "stock = 0 agotado" "$(body_of "$R" | json 'j.stock')" "0"
+# --- listado expone featured/minStock (filtros del admin) ---
+check "listado incluye featured booleano" "$(body_of "$(curl -s "$B/products")" | json 'j.every(p=>p.featured===true || p.featured===false)')" "true"
+check "listado incluye minStock numerico" "$(body_of "$(curl -s "$B/products")" | json 'j.every(p=>typeof p.minStock==="number")')" "true"
+# --- persistencia tras reiniciar el server ---
+kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
+node server.js > /tmp/citypets-integral-server.log 2>&1 &
+SERVER_PID=$!
+sleep 2
+check "persistencia: producto G23 sigue" "$(body_of "$(curl -s "$B/products")" | json 'j.some(p=>p.id===v)' "$GPID")" "true"
+check "persistencia: featured sigue" "$(body_of "$(curl -s "$B/products")" | json 'j.find(p=>p.id===v).featured' "$GPID")" "true"
+check "persistencia: minStock sigue" "$(body_of "$(curl -s "$B/products")" | json 'j.find(p=>p.id===v).minStock' "$GPID")" "3"
+# --- imagenes y videos existentes siguen funcionando ---
+IMG=$(body_of "$(curl -s "$B/products")" | json 'j.find(p=>p.id==="p1").images[0]')
+check "imagen seed servida 200" "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:3000$IMG")" "200"
+# --- XSS: el nombre con HTML se guarda pero el frontend lo escapa ---
+XSS='<img src=x onerror=alert(1)>'
+R=$(curl -s -w '|%{http_code}' -X POST "$B/products" -H "Authorization: Bearer $TANA" -H 'Content-Type: application/json' -d "{\"name\":\"$XSS\",\"species\":\"Perros\",\"price\":1000,\"stock\":5}")
+check "crear producto con nombre XSS 201" "$(code_of "$R")" "201"
+XID=$(body_of "$R" | json 'j.id')
+check "nombre XSS almacenado tal cual" "$(body_of "$(curl -s "$B/products")" | json 'j.find(p=>p.id===v).name' "$XID")" "$XSS"
+if grep -q 'esc(p.name)' ../js/app.js && grep -q 'esc(p.desc)' ../js/app.js; then
+  ok "XSS: frontend escapa nombre/desc"
+else
+  ko "XSS: frontend NO escapa"
+fi
+# --- limpieza (por id, sin confundirse con el producto XSS intencional de G6) ---
+curl -s -o /dev/null -X DELETE "$B/products/$GPID" -H "Authorization: Bearer $TANA"
+curl -s -o /dev/null -X DELETE "$B/products/$XID" -H "Authorization: Bearer $TANA"
+check "limpieza G23 completa" "$(body_of "$(curl -s "$B/products")" | json 'j.some(p=>p.id==="'$GPID'" || p.id==="'$XID'")')" "false"
 [ "$FAIL" -eq 0 ]

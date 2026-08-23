@@ -110,6 +110,21 @@
           Especie: Perros | Gatos | General · Solo se importan las filas válidas; las inválidas se listan en el reporte.
         </p>
       </div>
+      <div class="panel" id="alertsPanel">
+        <div class="panel-header">
+          <h3>🔔 Alertas de inventario</h3>
+          <span class="badge badge-gold" id="alertsCount">0</span>
+        </div>
+        <div id="alertsList" class="ta-center muted" style="font-size:.9rem">Cargando…</div>
+      </div>
+
+      <div class="tabs" id="adminFilters">
+        <button class="tab active" data-afilter="todos">Todos</button>
+        <button class="tab" data-afilter="featured">⭐ Destacados</button>
+        <button class="tab" data-afilter="low">⚠️ Stock bajo</button>
+        <button class="tab" data-afilter="out">🔴 Agotados</button>
+      </div>
+
       <div class="table-wrap">
         <table>
           <thead><tr><th>Imagen</th><th>Producto</th><th>Especie</th><th>Precio</th><th>Stock</th><th>Media</th><th>Acciones</th></tr></thead>
@@ -194,6 +209,15 @@
         <div class="row">
           <div class="field grow"><label>Stock inicial</label><input id="apmStock" type="number" min="0" /></div>
           <div class="field grow"><label>Ración diaria (g/día)</label><input id="apmRation" type="number" min="0" /></div>
+        </div>
+        <div class="row">
+          <div class="field grow"><label>📦 Stock mínimo</label><input id="apmMinStock" type="number" min="0" placeholder="10" /></div>
+          <div class="field grow" style="display:flex;align-items:flex-end;padding-bottom:14px">
+            <label class="checkbox-row" style="cursor:pointer;margin:0">
+              <input type="checkbox" id="apmFeatured" />
+              <span>⭐ Producto destacado</span>
+            </label>
+          </div>
         </div>
         <div class="field"><label>Descripción</label><textarea id="apmDesc"></textarea></div>
         <div class="field"><label>Tags (separadas por ;)</label><input id="apmTags" type="text" placeholder="top;nuevo" /></div>

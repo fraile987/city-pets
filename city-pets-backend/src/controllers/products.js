@@ -89,6 +89,12 @@ function validateProductFields(body) {
   if (category !== undefined && typeof category === 'string' && category.trim().length > MAX.category) {
     return `La categoría no puede superar ${MAX.category} caracteres`;
   }
+  if (body.featured !== undefined && typeof body.featured !== 'boolean') {
+    return 'El campo featured debe ser un booleano';
+  }
+  if (body.minStock !== undefined && (typeof body.minStock !== 'number' || !Number.isInteger(body.minStock) || body.minStock < 0)) {
+    return 'El stock mínimo debe ser un entero mayor o igual a 0';
+  }
   return null;
 }
 
@@ -110,7 +116,11 @@ async function createProduct(req, res) {
       tags: toJsonArray(req.body.tags),
       images: toJsonArray(sanitizeImages(req.body.images) || []),
       video: sanitizeVideo(req.body.video) || '',
-      rating: isNaN(parseFloat(req.body.rating)) ? 4.0 : Math.min(Math.max(parseFloat(req.body.rating), 0), 5)
+      rating: isNaN(parseFloat(req.body.rating)) ? 4.0 : Math.min(Math.max(parseFloat(req.body.rating), 0), 5),
+      featured: req.body.featured === true,
+      minStock: req.body.minStock === undefined || req.body.minStock === null
+        ? 10
+        : Math.min(toNonNegInt(req.body.minStock), 1000000)
     }
   });
 
@@ -127,7 +137,7 @@ async function updateProduct(req, res) {
     return res.status(404).json({ error: 'Producto no encontrado' });
   }
 
-  const { name, species, category, price, unit, grams, stock, desc, dailyRation, tags, images, video, rating } = req.body;
+  const { name, species, category, price, unit, grams, stock, desc, dailyRation, tags, images, video, rating, featured, minStock } = req.body;
   const data = {};
 
   if (name !== undefined) {
@@ -159,6 +169,18 @@ async function updateProduct(req, res) {
   if (images !== undefined) data.images = toJsonArray(sanitizeImages(images) || []);
   if (video !== undefined) data.video = sanitizeVideo(video);
   if (rating !== undefined) data.rating = isNaN(parseFloat(rating)) ? 4.0 : Math.min(Math.max(parseFloat(rating), 0), 5);
+  if (featured !== undefined) {
+    if (typeof featured !== 'boolean') {
+      return res.status(400).json({ error: 'El campo featured debe ser un booleano' });
+    }
+    data.featured = featured;
+  }
+  if (minStock !== undefined) {
+    if (typeof minStock !== 'number' || !Number.isInteger(minStock) || minStock < 0) {
+      return res.status(400).json({ error: 'El stock mínimo debe ser un entero mayor o igual a 0' });
+    }
+    data.minStock = Math.min(minStock, 1000000);
+  }
 
   const product = await prisma.product.update({ where: { id: existing.id }, data });
   res.json({
