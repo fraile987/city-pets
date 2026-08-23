@@ -22,6 +22,7 @@
     bindConfirm();
     bindTools();
     renderFeedbackList();
+    window.addEventListener('store-settings-changed', renderDeliveryPromo);
     await Promise.all([initSession(), loadProducts(), loadStoreSettings()]);
     refreshSessionUI();
     refreshProfileView();
@@ -29,6 +30,7 @@
     renderCart();
     renderProducts();
     renderFeatured();
+    renderDeliveryPromo();
     fillCalcSelects();
     await fillRecommendations();
   }
@@ -324,6 +326,29 @@
     return hint.ok
       ? '🎉 ¡Tu domicilio es gratis!'
       : `Agrega ${fmtMoney(hint.need)} más para obtener domicilio gratis 🚚`;
+  }
+
+  /* Banner promocional del Inicio: refleja la configuración actual de
+     domicilio (StoreSettings). Se re-renderiza al cargar settings y ante
+     el evento store-settings-changed. */
+  function renderDeliveryPromo() {
+    const big = $('#flyerDelivery');
+    const sub = $('#flyerDeliverySub');
+    if (!big || !sub) return;
+    const { deliveryCost: dc, freeDeliveryFrom: ff } = getStoreSettings();
+    const sameDay = 'Entrega el mismo día en la franja siguiente';
+    if (dc === 0 && ff === 0) {
+      big.textContent = '🎉 ¡Domicilio gratis en todas las compras!';
+      sub.textContent = sameDay;
+      return;
+    }
+    if (dc === 0) {
+      big.textContent = '🚚 ¡Domicilio gratis!';
+      sub.textContent = sameDay;
+      return;
+    }
+    big.textContent = `🚚 Domicilio: ${fmtMoney(dc)}`;
+    sub.textContent = ff > 0 ? `🎁 Gratis en compras desde ${fmtMoney(ff)}` : sameDay;
   }
 
   function renderCart() {

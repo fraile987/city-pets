@@ -72,6 +72,7 @@ function setStoreSettings(s) {
   if (s && typeof s.deliveryCost === 'number' && typeof s.freeDeliveryFrom === 'number') {
     storeSettings.deliveryCost = s.deliveryCost;
     storeSettings.freeDeliveryFrom = s.freeDeliveryFrom;
+    try { window.dispatchEvent(new CustomEvent('store-settings-changed')); } catch { /* noop */ }
   }
 }
 
