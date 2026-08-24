@@ -7,6 +7,7 @@ const prisma = require('../db');
 const { Prisma } = require('@prisma/client');
 const logger = require('../logger');
 const { ORDER_STATUSES, ORDER_TRANSITIONS } = require('../constants');
+const ExcelJS = require('exceljs');
 const { serializeOrder } = require('./orders');
 
 /* Indica que el estado leído quedó obsoleto por un cambio concurrente. */
@@ -185,25 +186,29 @@ function sendCSV(res, filename, rows) {
 
 const ORDER_STATUS_SEQ = ['pendiente', 'confirmado', 'enviado', 'entregado', 'cancelado', 'incidente'];
 
-async function exportOrdersCSV(req, res) {
-  const { q, from, to, status, sort } = req.query;
-
+/* Filtro de exportación de pedidos (CSV y Excel): mismas reglas que
+   listAllOrders/exportOrdersCSV. Devuelve { where } o { error }. */
+function orderExportWhere(query) {
+  const { from, to, status } = query;
   const where = {};
   if (status && status !== 'todos') {
     if (!ORDER_STATUS_SEQ.includes(status)) {
-      return res.status(400).json({ error: 'Estado inválido' });
+      return { error: 'Estado inválido' };
     }
     where.status = status;
   }
   if (from || to) {
     if (!from || !to || !toDateOnly(from) || !toDateOnly(to) || from > to) {
-      return res.status(400).json({ error: 'Rango de fechas inválido' });
+      return { error: 'Rango de fechas inválido' };
     }
     where.createdAt = { gte: new Date(from + 'T00:00:00'), lte: new Date(to + 'T23:59:59.999') };
   }
+  return { where };
+}
 
+/* Lista filtrada y ordenada de pedidos para exportación (misma lógica que CSV). */
+async function orderExportList(where, q, sort) {
   let list = await prisma.order.findMany({ where, orderBy: { createdAt: 'desc' } });
-
   if (q) {
     const needle = String(q).trim().toLowerCase();
     list = list.filter((o) =>
@@ -215,6 +220,64 @@ async function exportOrdersCSV(req, res) {
   if (sort === 'total') list = [...list].sort((a, b) => b.total - a.total);
   else if (sort === 'estado') list = [...list].sort((a, b) => ORDER_STATUS_SEQ.indexOf(a.status) - ORDER_STATUS_SEQ.indexOf(b.status));
   else list = [...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return list;
+}
+
+function orderExportRows(list) {
+  return list.map((o) => {
+    const pay = parseJson(o.payment, { method: 'digital' });
+    return {
+      id: o.id,
+      cliente: o.userName,
+      telefono: o.phone,
+      fechaPedido: o.createdAt.toISOString(),
+      fechaEntrega: o.deliveredAt ? o.deliveredAt.toISOString() : '',
+      estado: o.status,
+      subtotal: o.subtotal,
+      domicilio: o.delivery,
+      total: o.total,
+      pago: pay.method === 'efectivo' ? 'Efectivo' : 'Digital'
+    };
+  });
+}
+
+/* Resumen coherente con el conjunto filtrado (Fase B):
+   - status = todos (o ausente) -> "Total vendido" = suma SOLO de entregados.
+   - status = entregado      -> "Total vendido" = suma de la lista (todos entregados).
+   - otro estado específico  -> "Total del filtro" = suma de la lista filtrada. */
+function orderExportSummary(list, status, from, to) {
+  const delivered = list.filter((o) => o.status === 'entregado');
+  const cancelled = list.filter((o) => o.status === 'cancelado');
+  const isTodos = !status || status === 'todos';
+  const soldSet = isTodos || status === 'entregado' ? delivered : list;
+  const totalLabel = isTodos || status === 'entregado' ? 'Total vendido' : 'Total del filtro';
+
+  const sum = soldSet.reduce((acc, o) => {
+    acc.total += o.total;
+    const pay = parseJson(o.payment, { method: 'digital' });
+    if (pay.method === 'efectivo') acc.efectivo += o.total;
+    else acc.digital += o.total;
+    return acc;
+  }, { total: 0, efectivo: 0, digital: 0 });
+
+  const period = from && to ? `${from} a ${to}` : from || to || 'Todo el historial';
+  return {
+    period: period + (status && status !== 'todos' ? ` · Estado: ${status}` : ''),
+    pedidos: list.length,
+    entregados: delivered.length,
+    cancelados: cancelled.length,
+    totalLabel,
+    total: sum.total,
+    efectivo: sum.efectivo,
+    digital: sum.digital
+  };
+}
+
+async function exportOrdersCSV(req, res) {
+  const { q, from, to, status, sort } = req.query;
+  const w = orderExportWhere(req.query);
+  if (w.error) return res.status(400).json({ error: w.error });
+  const list = await orderExportList(w.where, q, sort);
 
   const rows = [
     ['ID', 'Cliente', 'Teléfono', 'Fecha pedido', 'Fecha entrega', 'Estado', 'Subtotal', 'Domicilio', 'Total', 'Método de pago']
@@ -235,6 +298,57 @@ async function exportOrdersCSV(req, res) {
     ]);
   });
   sendCSV(res, 'citypets_pedidos.csv', rows);
+}
+
+/* Informe de ventas en Excel (.xlsx): Hoja "Pedidos" + Hoja "Resumen".
+   Usa EXACTAMENTE los mismos filtros y reglas de seguridad que el CSV. */
+async function exportOrdersXLSX(req, res) {
+  const { q, from, to, status, sort } = req.query;
+  const w = orderExportWhere(req.query);
+  if (w.error) return res.status(400).json({ error: w.error });
+  const list = await orderExportList(w.where, q, sort);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'City Pets';
+
+  const ws1 = wb.addWorksheet('Pedidos');
+  ws1.columns = [
+    { header: 'ID', key: 'id', width: 26 },
+    { header: 'Cliente', key: 'cliente', width: 28 },
+    { header: 'Teléfono', key: 'telefono', width: 18 },
+    { header: 'Fecha pedido', key: 'fechaPedido', width: 24 },
+    { header: 'Fecha entrega', key: 'fechaEntrega', width: 24 },
+    { header: 'Estado', key: 'estado', width: 14 },
+    { header: 'Subtotal', key: 'subtotal', width: 14 },
+    { header: 'Domicilio', key: 'domicilio', width: 12 },
+    { header: 'Total', key: 'total', width: 14 },
+    { header: 'Método de pago', key: 'pago', width: 14 }
+  ];
+  ws1.getRow(1).font = { bold: true };
+  orderExportRows(list).forEach((r) => ws1.addRow(r));
+
+  const summary = orderExportSummary(list, status, from, to);
+  const ws2 = wb.addWorksheet('Resumen');
+  ws2.columns = [
+    { header: 'Indicador', key: 'k', width: 34 },
+    { header: 'Valor', key: 'v', width: 24 }
+  ];
+  ws2.getRow(1).font = { bold: true };
+  [
+    ['Período', summary.period],
+    ['Pedidos totales', summary.pedidos],
+    ['Entregados', summary.entregados],
+    ['Cancelados', summary.cancelados],
+    [summary.totalLabel, summary.total],
+    ['Total efectivo', summary.efectivo],
+    ['Total digital', summary.digital]
+  ].forEach(([k, v]) => ws2.addRow({ k, v }));
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="citypets_pedidos.xlsx"');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  const buf = await wb.xlsx.writeBuffer();
+  res.send(Buffer.from(buf));
 }
 
 async function exportClosuresCSV(req, res) {
@@ -471,4 +585,4 @@ async function listAttribution(req, res) {
   });
 }
 
-module.exports = { listAllOrders, updateOrderStatus, listAttribution, getRevenue, createClosure, listClosures, exportOrdersCSV, exportClosuresCSV };
+module.exports = { listAllOrders, updateOrderStatus, listAttribution, getRevenue, createClosure, listClosures, exportOrdersCSV, exportOrdersXLSX, exportClosuresCSV };

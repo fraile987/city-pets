@@ -369,6 +369,7 @@
     $('#ordersPrev').addEventListener('click', () => { if (ordersMeta.page > 1) { ordersPage--; loadOrders(); } });
     $('#ordersNext').addEventListener('click', () => { if (ordersMeta.page < (ordersMeta.pages || 1)) { ordersPage++; loadOrders(); } });
     $('#btnExportOrders').addEventListener('click', () => downloadCSV('/admin/export/orders?' + currentOrderExportQuery(), 'citypets_pedidos.csv'));
+    $('#btnExportOrdersXlsx').addEventListener('click', () => downloadCSV('/admin/export/orders-xlsx?' + currentOrderExportQuery(), 'citypets_pedidos.xlsx'));
     $('#btnExportClosures').addEventListener('click', () => downloadCSV('/admin/export/closures', 'citypets_cierres.csv'));
   }
 
