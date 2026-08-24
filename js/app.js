@@ -877,46 +877,40 @@
     const buildAnnual = () => {
       const s = compState;
       if (!s) return '';
+      const money = (n) => fmtMoney(Math.round(n));
+      const headline = (savings) => {
+        if (s.equal) return { text: '⚖️ Sin ahorro anual — mismo precio por kg', color: 'var(--navy-800)' };
+        if (s.cheaper) return { text: `💰 Ahorro anual estimado: ${money(savings)}`, color: 'var(--green-600)' };
+        return { text: `💰 Costo adicional anual: ${money(Math.abs(savings))}`, color: 'var(--red-500)' };
+      };
       const monthlyKg = parseFloat($('#compMonthlyKg').value);
       if (s.ration > 0) {
         const annualKg = s.ration * 365 / 1000;
         const cpAnnual = s.cpPerKg * annualKg;
         const compAnnual = s.compPerKg * annualKg;
-        const savings = compAnnual - cpAnnual;
-        const savingsLabel = s.equal
-          ? 'Sin ahorro anual'
-          : s.cheaper
-            ? `Ahorro anual: ${fmtMoney(Math.round(savings))}`
-            : `${fmtMoney(Math.round(Math.abs(savings)))} más al año`;
+        const h = headline(compAnnual - cpAnnual);
         return `
           <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
-            <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
+            <div style="font-size:1.15rem;font-weight:800;color:${h.color};margin-bottom:.4rem">${h.text}</div>
             <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Estimación basada en la ración diaria de ${s.ration} g/día y 365 días de consumo.</div>
             <div class="summary-line"><span>Consumo diario</span><span>${s.ration} g/día</span></div>
             <div class="summary-line"><span>Consumo anual</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
-            <div class="summary-line"><span>City Pets al año</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
-            <div class="summary-line"><span>Competencia al año</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
-            <div class="summary-line"><span>Ahorro anual</span><span style="font-weight:800;color:${s.diffColor}">${savingsLabel}</span></div>
+            <div class="summary-line"><span>City Pets al año</span><span class="money">${money(cpAnnual)}</span></div>
+            <div class="summary-line"><span>Competencia al año</span><span class="money">${money(compAnnual)}</span></div>
           </div>`;
       }
       if (!isNaN(monthlyKg) && monthlyKg > 0) {
         const annualKg = monthlyKg * 12;
         const cpAnnual = s.cpPerKg * annualKg;
         const compAnnual = s.compPerKg * annualKg;
-        const savings = compAnnual - cpAnnual;
-        const savingsLabel = s.equal
-          ? 'Sin ahorro anual'
-          : s.cheaper
-            ? `Ahorro anual: ${fmtMoney(Math.round(savings))}`
-            : `${fmtMoney(Math.round(Math.abs(savings)))} más al año`;
+        const h = headline(compAnnual - cpAnnual);
         return `
           <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
-            <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
+            <div style="font-size:1.15rem;font-weight:800;color:${h.color};margin-bottom:.4rem">${h.text}</div>
             <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Estimación basada en un consumo de ${Number(monthlyKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg al mes ingresado por ti.</div>
             <div class="summary-line"><span>Consumo anual estimado</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
-            <div class="summary-line"><span>Gasto anual City Pets</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
-            <div class="summary-line"><span>Gasto anual competidor</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
-            <div class="summary-line"><span>Ahorro anual estimado</span><span style="font-weight:800;color:${s.diffColor}">${savingsLabel}</span></div>
+            <div class="summary-line"><span>Gasto anual City Pets</span><span class="money">${money(cpAnnual)}</span></div>
+            <div class="summary-line"><span>Gasto anual competidor</span><span class="money">${money(compAnnual)}</span></div>
           </div>`;
       }
       return `
