@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const prisma = require('../db');
 const logger = require('../logger');
+const { isMailConfigured, sendPasswordResetMail } = require('../services/mail');
 const { CHANNELS, MAX, isEmail } = require('../constants');
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -160,10 +161,12 @@ const FORGOT_GENERIC = { message: 'Si el correo existe, recibirás un enlace de 
 /* Solicitar recuperación: respuesta genérica (exista o no el correo) para
    evitar enumeración de usuarios. En desarrollo (NODE_ENV !== 'production')
    se devuelve resetLink para probar sin SMTP; en producción jamás se expone
-   el token ni el enlace. */
+   el token ni el enlace, y NO queda ningún token activo si no existe una vía
+   real de envío (SMTP). */
 async function forgot(req, res) {
   const rawEmail = req.body && typeof req.body.email === 'string' ? req.body.email.trim() : '';
   const email = rawEmail.toLowerCase();
+  const isProd = process.env.NODE_ENV === 'production';
 
   if (!isEmail(email)) {
     return res.json(FORGOT_GENERIC);
@@ -174,9 +177,17 @@ async function forgot(req, res) {
     return res.json(FORGOT_GENERIC);
   }
 
+  /* Producción sin SMTP: no se crea ningún token utilizable que nunca se
+     pudo enviar. Se responde genérico y se registra una advertencia segura. */
+  if (isProd && !isMailConfigured()) {
+    logger.warn('Recuperación: SMTP no configurado en producción', { path: '/api/auth/forgot' });
+    return res.json(FORGOT_GENERIC);
+  }
+
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MIN * 60 * 1000);
+  const resetLink = buildResetLink(token);
 
   try {
     /* Máximo un token activo por usuario: invalida tokens previos sin usar. */
@@ -189,9 +200,21 @@ async function forgot(req, res) {
     return res.status(500).json({ message: 'No se pudo procesar la solicitud.' });
   }
 
+  /* Envío SMTP si está configurado. */
+  if (isMailConfigured()) {
+    const result = await sendPasswordResetMail({ to: email, name: user.name, resetLink });
+    if (!result.ok && isProd) {
+      /* Producción: un token que no se pudo enviar NO debe quedar activo. */
+      await prisma.passwordResetToken.deleteMany({ where: { tokenHash } });
+      logger.warn('Recuperación: envío SMTP falló', { path: '/api/auth/forgot' });
+      return res.json(FORGOT_GENERIC);
+    }
+    /* En desarrollo, aunque falle el envío, el resetLink sigue siendo usable. */
+  }
+
   const out = { ...FORGOT_GENERIC };
-  if (process.env.NODE_ENV !== 'production') {
-    out.resetLink = buildResetLink(token);
+  if (!isProd) {
+    out.resetLink = resetLink;
   }
   return res.json(out);
 }
