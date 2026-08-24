@@ -62,8 +62,8 @@ model Product {
 
 model Order {
   id             String      @id @default(cuid())
-  user           User        @relation(fields: [userId], references: [id])
-  userId         String
+  user           User?       @relation(fields: [userId], references: [id])
+  userId         String?
   userName       String
   phone          String
   address        String
@@ -80,6 +80,7 @@ model Order {
   status         String      @default("pendiente")
   deliveredAt    DateTime?
   clientOrderKey String?
+  guestKey       String?     @unique
 
   @@unique([userId, clientOrderKey])
   @@index([status, createdAt])

@@ -1,8 +1,10 @@
 /* =========================================================
    CITY PETS — Controladores de pedidos
-   El pedido siempre se asocia a req.user.id (nunca se acepta
-   userId del cuerpo). El backend recalcula precios, totales y
-   la franja de entrega; no confía en el frontend.
+   Modo autenticado: el pedido se asocia a req.user.id (nunca se acepta
+   userId del cuerpo). Modo invitado (sin JWT): userId queda NULL y los
+   datos del cliente (name/phone) se validan del cuerpo. El backend
+   recalcula precios, totales y la franja de entrega; no confía en el
+   frontend. La idempotencia usa clientOrderKey única global.
    ========================================================= */
 
 const prisma = require('../db');
@@ -107,10 +109,21 @@ function intentFromOrder(o) {
   return [items, (o.address || '').trim(), `${payMethod}:${denomination}`].join('||');
 }
 
-/* Devuelve el pedido existente por (userId, clientOrderKey) o null. */
-function findByIdempotencyKey(userId, key) {
+/* Idempotencia P6.2 (sin regresión para usuarios registrados):
+   - Usuario: clave única por (userId, clientOrderKey), como antes.
+   - Invitado: clave única global por guestKey (userId es NULL; SQLite trata
+     NULLs como distintos en el índice compuesto, por lo que NO puede
+     depender de [userId, clientOrderKey]). */
+function findUserOrderByKey(userId, key) {
   return prisma.order.findUnique({
     where: { userId_clientOrderKey: { userId, clientOrderKey: key } },
+    include: { items: true }
+  });
+}
+
+function findGuestOrderByKey(key) {
+  return prisma.order.findUnique({
+    where: { guestKey: key },
     include: { items: true }
   });
 }
@@ -127,14 +140,37 @@ async function listOrders(req, res) {
 
 async function createOrder(req, res) {
   const { items, address, payment } = req.body;
+  const isGuest = !req.user;
   let clientOrderKey = req.body && req.body.clientOrderKey;
 
-  /* Clave de idempotencia opcional (P6.2): clave única por intención. */
+  /* Clave de idempotencia opcional (P6.2): clave única por intención.
+     Para invitados es OBLIGATORIA: sin cuenta no hay otro medio de
+     correlacionar reintentos ni de evitar duplicados. */
   if (clientOrderKey !== undefined && clientOrderKey !== null) {
     if (typeof clientOrderKey !== 'string' || clientOrderKey.trim() === '' || clientOrderKey.trim().length > 128) {
       return res.status(400).json({ error: 'clientOrderKey debe ser una cadena de 1 a 128 caracteres' });
     }
     clientOrderKey = clientOrderKey.trim();
+  }
+  if (isGuest && !clientOrderKey) {
+    return res.status(400).json({ error: 'Los pedidos de invitado requieren una clientOrderKey para idempotencia' });
+  }
+
+  /* Datos del cliente: autenticado provienen de la sesión; invitado del cuerpo. */
+  let customerName = '';
+  let customerPhone = '';
+  if (isGuest) {
+    if (typeof req.body.name !== 'string' || req.body.name.trim().length < 2 || req.body.name.trim().length > MAX.name) {
+      return res.status(400).json({ error: 'El nombre del invitado no es válido' });
+    }
+    if (typeof req.body.phone !== 'string' || req.body.phone.trim().length < 7 || req.body.phone.trim().length > MAX.phone) {
+      return res.status(400).json({ error: 'El teléfono del invitado no es válido' });
+    }
+    customerName = req.body.name.trim();
+    customerPhone = req.body.phone.trim();
+  } else {
+    customerName = req.user.name;
+    customerPhone = req.user.phone;
   }
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -174,7 +210,13 @@ async function createOrder(req, res) {
     return res.status(400).json({ error: `La dirección no puede superar ${MAX.address} caracteres` });
   }
 
-  /* Normaliza el método de pago (objeto -> String serializado). */
+  /* Normaliza el método de pago (objeto -> String serializado).
+     Si se envía payment, el método debe ser efectivo o digital. */
+  if (payment !== undefined && payment !== null) {
+    if (typeof payment !== 'object' || payment.method === undefined || !['efectivo', 'digital'].includes(payment.method)) {
+      return res.status(400).json({ error: 'El método de pago debe ser efectivo o digital' });
+    }
+  }
   const payMethod = payment && payment.method === 'efectivo' ? 'efectivo' : 'digital';
   const denomination = payMethod === 'efectivo' ? toNonNegInt(payment && payment.denomination) : 0;
   if (payMethod === 'efectivo' && (denomination === null || denomination > ORDER_LIMITS.maxCashDenomination)) {
@@ -185,10 +227,13 @@ async function createOrder(req, res) {
     denomination: denomination || 0
   });
 
-  /* Idempotencia (P6.2): si ya existe un pedido para (userId, clientOrderKey),
+  /* Idempotencia (P6.2): si ya existe un pedido para la misma intención
+     (usuario: por su userId + clientOrderKey; invitado: por guestKey),
      se devuelve el original si la intención coincide; si difiere, 409. */
   if (clientOrderKey) {
-    const existing = await findByIdempotencyKey(req.user.id, clientOrderKey);
+    const existing = isGuest
+      ? await findGuestOrderByKey(clientOrderKey)
+      : await findUserOrderByKey(req.user.id, clientOrderKey);
     if (existing) {
       if (intentFromOrder(existing) === intentFromRequest(normalized, address, payMethod, denomination)) {
         return res.status(200).json(serializeOrder(existing));
@@ -244,9 +289,10 @@ async function createOrder(req, res) {
 
       return tx.order.create({
         data: {
-          userId: req.user.id,
-          userName: req.user.name,
-          phone: req.user.phone,
+          userId: isGuest ? null : req.user.id,
+          userName: customerName,
+          phone: customerPhone,
+          guestKey: isGuest ? clientOrderKey : undefined,
           address: address.trim(),
           items: {
             create: lineItems.map((i) => ({
@@ -281,7 +327,9 @@ async function createOrder(req, res) {
        La transacción (incluido el descuento de stock) se revierte. Se recupera
        el pedido existente y se devuelve si la intención coincide. */
     if (e.code === 'P2002' && clientOrderKey) {
-      const existing = await findByIdempotencyKey(req.user.id, clientOrderKey);
+      const existing = isGuest
+        ? await findGuestOrderByKey(clientOrderKey)
+        : await findUserOrderByKey(req.user.id, clientOrderKey);
       if (existing) {
         if (intentFromOrder(existing) === intentFromRequest(normalized, address, payMethod, denomination)) {
           return res.status(200).json(serializeOrder(existing));
