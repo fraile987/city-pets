@@ -11,7 +11,7 @@
   let productsCache = [];
   let ordersCache = [];
   let attributionCache = null;
-  let settingsCache = { deliveryCost: 10000, freeDeliveryFrom: 100000 };
+  let settingsCache = { deliveryCost: 10000, freeDeliveryFrom: 100000, whatsapp: '', daysOfWeek: '', openingTime: '', closingTime: '' };
   let revenueCache = null;
   let closuresCache = [];
 
@@ -372,7 +372,7 @@
     $('#btnExportClosures').addEventListener('click', () => downloadCSV('/admin/export/closures', 'citypets_cierres.csv'));
   }
 
-  /* ---------- Configuración de domicilio (D3) ---------- */
+  /* ---------- Configuración (domicilio + comercial) ---------- */
   function renderSettings() {
     const s = settingsCache || {};
     $('#setDeliveryCost').value = s.deliveryCost ?? 10000;
@@ -380,6 +380,20 @@
     $('#setExplanation').textContent = s.freeDeliveryFrom > 0
       ? `Las compras iguales o superiores a ${fmtMoney(s.freeDeliveryFrom)} tienen domicilio gratis.`
       : 'No hay promoción automática de domicilio gratis por monto.';
+    const wa = $('#setWhatsapp');
+    const days = $('#setDays');
+    const open = $('#setOpen');
+    const close = $('#setClose');
+    if (wa) wa.value = s.whatsapp || '';
+    if (days) days.value = s.daysOfWeek || '';
+    if (open) open.value = s.openingTime || '';
+    if (close) close.value = s.closingTime || '';
+    const expl = $('#commercialExplanation');
+    if (expl) {
+      expl.textContent = s.daysOfWeek && s.openingTime
+        ? `El storefront mostrará: ${s.daysOfWeek} ${s.openingTime} – ${s.closingTime} · WhatsApp ${s.whatsapp || '—'}`
+        : 'Estos datos se muestran en la barra informativa, el pie y el enlace de WhatsApp del storefront.';
+    }
   }
 
   function bindSettings() {
@@ -395,6 +409,27 @@
         settingsCache = data;
         renderSettings();
         toast('Configuración de domicilio guardada', 'success');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
+
+    $('#btnSaveCommercial').addEventListener('click', async () => {
+      const body = {
+        whatsapp: $('#setWhatsapp').value.trim(),
+        daysOfWeek: $('#setDays').value.trim(),
+        openingTime: $('#setOpen').value.trim(),
+        closingTime: $('#setClose').value.trim()
+      };
+      if (!body.whatsapp || !body.daysOfWeek || !body.openingTime || !body.closingTime) {
+        toast('Completa WhatsApp, días, apertura y cierre', 'error');
+        return;
+      }
+      try {
+        const data = await api('/admin/settings', { method: 'PUT', body });
+        settingsCache = data;
+        renderSettings();
+        toast('Configuración comercial guardada', 'success');
       } catch (e) {
         toast(e.message, 'error');
       }

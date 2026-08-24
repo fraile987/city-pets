@@ -23,7 +23,7 @@
     bindConfirm();
     bindTools();
     renderFeedbackList();
-    window.addEventListener('store-settings-changed', renderDeliveryPromo);
+    window.addEventListener('store-settings-changed', () => { renderDeliveryPromo(); renderCommercialInfo(); });
     await Promise.all([initSession(), loadProducts(), loadStoreSettings()]);
     refreshSessionUI();
     refreshProfileView();
@@ -32,6 +32,7 @@
     renderProducts();
     renderFeatured();
     renderDeliveryPromo();
+    renderCommercialInfo();
     fillCalcSelects();
     await fillRecommendations();
   }
@@ -350,6 +351,31 @@
     }
     big.textContent = `🚚 Domicilio: ${fmtMoney(dc)}`;
     sub.textContent = ff > 0 ? `🎁 Gratis en compras desde ${fmtMoney(ff)}` : sameDay;
+  }
+
+  /* Información comercial (WhatsApp, días y horario de atención) desde
+     StoreSettings. Actualiza la barra informativa, el pie y el enlace de
+     WhatsApp. Se re-renderiza al cargar settings y ante store-settings-changed. */
+  function renderCommercialInfo() {
+    const s = getStoreSettings();
+    const schedule = $('#storeSchedule');
+    const footSchedule = $('#footerSchedule');
+    const footPhone = $('#footerPhone');
+    const footWa = $('#footerWhatsApp');
+    if (schedule) {
+      schedule.textContent = `🕒 Horarios de atención: ${s.daysOfWeek} ${s.openingTime} – ${s.closingTime}`;
+    }
+    if (footSchedule) {
+      footSchedule.textContent = `🕒 ${s.daysOfWeek} ${s.openingTime}-${s.closingTime}`;
+    }
+    if (footPhone) {
+      footPhone.textContent = s.whatsapp || '—';
+    }
+    if (footWa) {
+      const link = waLink();
+      footWa.href = link;
+      footWa.setAttribute('aria-label', 'Chatea con City Pets por WhatsApp');
+    }
   }
 
   function renderCart() {

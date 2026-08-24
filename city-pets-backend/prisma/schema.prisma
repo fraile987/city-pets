@@ -124,6 +124,10 @@ model StoreSettings {
   id               Int      @id @default(1)
   deliveryCost     Int      @default(10000)
   freeDeliveryFrom Int      @default(100000)
+  whatsapp         String   @default("")
+  daysOfWeek       String   @default("")
+  openingTime      String   @default("")
+  closingTime      String   @default("")
   updatedAt        DateTime @updatedAt
 }
 

@@ -63,21 +63,39 @@ async function uploadFile(path, file) {
   return data;
 }
 
-/* ============ Configuración global (domicilio) ============
+/* ============ Configuración global (domicilio + comercial) ============
    Se carga desde /api/settings. Defaults iguales a los del backend
    por si la API aún no responde. La regla de cálculo es única. */
-const storeSettings = { deliveryCost: 10000, freeDeliveryFrom: 100000 };
+const storeSettings = {
+  deliveryCost: 10000,
+  freeDeliveryFrom: 100000,
+  whatsapp: '3001234567',
+  daysOfWeek: 'Lun a Sáb',
+  openingTime: '8:00 AM',
+  closingTime: '8:00 PM'
+};
 
 function setStoreSettings(s) {
-  if (s && typeof s.deliveryCost === 'number' && typeof s.freeDeliveryFrom === 'number') {
-    storeSettings.deliveryCost = s.deliveryCost;
-    storeSettings.freeDeliveryFrom = s.freeDeliveryFrom;
-    try { window.dispatchEvent(new CustomEvent('store-settings-changed')); } catch { /* noop */ }
-  }
+  if (!s || typeof s !== 'object') return;
+  if (typeof s.deliveryCost === 'number') storeSettings.deliveryCost = s.deliveryCost;
+  if (typeof s.freeDeliveryFrom === 'number') storeSettings.freeDeliveryFrom = s.freeDeliveryFrom;
+  if (typeof s.whatsapp === 'string') storeSettings.whatsapp = s.whatsapp;
+  if (typeof s.daysOfWeek === 'string') storeSettings.daysOfWeek = s.daysOfWeek;
+  if (typeof s.openingTime === 'string') storeSettings.openingTime = s.openingTime;
+  if (typeof s.closingTime === 'string') storeSettings.closingTime = s.closingTime;
+  try { window.dispatchEvent(new CustomEvent('store-settings-changed')); } catch { /* noop */ }
 }
 
 function getStoreSettings() {
   return { ...storeSettings };
+}
+
+/* Enlace de WhatsApp normalizado: https://wa.me/<dígitos>.
+   El número se normaliza eliminando espacios, +, -, paréntesis u otros
+   caracteres de presentación. */
+function waLink() {
+  const digits = String(storeSettings.whatsapp || '').replace(/[^\d]/g, '');
+  return digits ? 'https://wa.me/' + digits : '';
 }
 
 async function loadStoreSettings() {
