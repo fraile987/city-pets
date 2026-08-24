@@ -4,10 +4,30 @@
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const prisma = require('../db');
+const logger = require('../logger');
 const { CHANNELS, MAX, isEmail } = require('../constants');
 
 const JWT_SECRET = process.env.JWT_SECRET;
+
+/* Recuperación de contraseña (D1): expiración de 30 minutos. */
+const RESET_TOKEN_TTL_MIN = 30;
+
+/* Señal interna: el token ya fue reclamado por otra solicitud (concurrencia). */
+class TokenConsumedError extends Error {}
+
+/* Hash SHA-256 del token. En BD SOLO se guarda el hash, nunca el token en claro. */
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/* Enlace de recuperación. Hasta que exista integración SMTP (fase posterior),
+   solo se usa para devolver el enlace en desarrollo. */
+function buildResetLink(token) {
+  const base = (process.env.APP_URL || '').replace(/\/+$/, '');
+  return `${base || 'http://localhost:3000'}/reset?token=${token}`;
+}
 
 function signToken(user) {
   return jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
@@ -133,4 +153,97 @@ async function updateMe(req, res) {
   res.json({ user: publicUser(user) });
 }
 
-module.exports = { register, login, me, updateMe };
+/* ---------- Recuperación de contraseña (D1) ---------- */
+
+const FORGOT_GENERIC = { message: 'Si el correo existe, recibirás un enlace de recuperación.' };
+
+/* Solicitar recuperación: respuesta genérica (exista o no el correo) para
+   evitar enumeración de usuarios. En desarrollo (NODE_ENV !== 'production')
+   se devuelve resetLink para probar sin SMTP; en producción jamás se expone
+   el token ni el enlace. */
+async function forgot(req, res) {
+  const rawEmail = req.body && typeof req.body.email === 'string' ? req.body.email.trim() : '';
+  const email = rawEmail.toLowerCase();
+
+  if (!isEmail(email)) {
+    return res.json(FORGOT_GENERIC);
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    return res.json(FORGOT_GENERIC);
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MIN * 60 * 1000);
+
+  try {
+    /* Máximo un token activo por usuario: invalida tokens previos sin usar. */
+    await prisma.$transaction([
+      prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } }),
+      prisma.passwordResetToken.create({ data: { tokenHash, userId: user.id, expiresAt } })
+    ]);
+  } catch (e) {
+    logger.error('Recuperación: no se pudo crear el token', { path: '/api/auth/forgot' });
+    return res.status(500).json({ message: 'No se pudo procesar la solicitud.' });
+  }
+
+  const out = { ...FORGOT_GENERIC };
+  if (process.env.NODE_ENV !== 'production') {
+    out.resetLink = buildResetLink(token);
+  }
+  return res.json(out);
+}
+
+/* Restablecer contraseña: token de un solo uso, atómico bajo concurrencia.
+   El consumo del token (usedAt) y el cambio de passwordHash ocurren en una
+   transacción; la reclamación es condicional (usedAt: null) para que con dos
+   solicitudes simultáneas solo una tenga éxito. */
+async function reset(req, res) {
+  const token = req.body && typeof req.body.token === 'string' ? req.body.token : '';
+  const newPassword = req.body && typeof req.body.newPassword === 'string' ? req.body.newPassword : '';
+
+  if (!token || token.length > 128) {
+    return res.status(400).json({ error: 'Token inválido' });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+
+  const tokenHash = hashToken(token);
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+  if (!record) {
+    return res.status(400).json({ error: 'Token inválido o expirado' });
+  }
+  if (record.usedAt) {
+    return res.status(400).json({ error: 'Este enlace ya fue utilizado' });
+  }
+  if (record.expiresAt.getTime() <= Date.now()) {
+    return res.status(400).json({ error: 'El enlace ha expirado' });
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+  try {
+    await prisma.$transaction(async (tx) => {
+      const claim = await tx.passwordResetToken.updateMany({
+        where: { id: record.id, usedAt: null },
+        data: { usedAt: new Date() }
+      });
+      if (claim.count !== 1) {
+        throw new TokenConsumedError();
+      }
+      await tx.user.update({ where: { id: record.userId }, data: { passwordHash: newHash } });
+    });
+  } catch (e) {
+    if (e instanceof TokenConsumedError) {
+      return res.status(400).json({ error: 'Este enlace ya fue utilizado' });
+    }
+    logger.error('Recuperación: error al restablecer', { path: '/api/auth/reset' });
+    return res.status(500).json({ error: 'No se pudo restablecer la contraseña' });
+  }
+
+  return res.json({ message: 'Contraseña actualizada.' });
+}
+
+module.exports = { register, login, me, updateMe, forgot, reset };

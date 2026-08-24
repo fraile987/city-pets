@@ -25,6 +25,7 @@ model User {
   feedback     Feedback[]
   attributions Attribution[]
   closures     StoreClosure[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model Pet {
@@ -37,6 +38,21 @@ model Pet {
   weight  Float?
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId  String
+}
+
+/* Token de un solo uso para recuperación de contraseña (D1).
+   Solo se guarda el SHA-256 del token; nunca el token en claro.
+   Expira a los 30 minutos y se marca usado al consumirlo. */
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Product {
