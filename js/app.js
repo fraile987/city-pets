@@ -607,6 +607,21 @@
     });
     $('#btnCheckoutLogin').addEventListener('click', checkoutLogin);
     $('#btnCheckoutRegister').addEventListener('click', checkoutRegister);
+
+    /* Confirmación de compra invitada (C3). */
+    document.querySelectorAll('[data-close-guest]').forEach(el =>
+      el.addEventListener('click', () => closeModals()));
+    $('#guestOrderModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeModals();
+    });
+    $('#btnGuestBackStore').addEventListener('click', () => {
+      closeModals();
+      AppNav('tienda');
+    });
+    $('#btnGuestCreateAccount').addEventListener('click', () => {
+      closeModals();
+      AppNav('perfil');
+    });
   }
 
   function updateCashChange() {
@@ -679,8 +694,13 @@
       $('#cartDrawer').classList.remove('open');
       renderCart();
       loadProducts();
-      toast(`¡Pedido ${order.id} confirmado! Entrega ${order.deliverySlot === 'manana' ? '🌅 Mañana' : '🌇 Tarde'} — ${order.deliveryLabel}.`, 'success');
-      AppNav('historial');
+      if (isGuest) {
+        /* Invitado (C3): confirmación propia, sin ir a Historial. */
+        renderGuestConfirm(order);
+      } else {
+        toast(`¡Pedido ${order.id} confirmado! Entrega ${order.deliverySlot === 'manana' ? '🌅 Mañana' : '🌇 Tarde'} — ${order.deliveryLabel}.`, 'success');
+        AppNav('historial');
+      }
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -688,6 +708,33 @@
       btn.disabled = false;
       btn.textContent = originalLabel;
     }
+  }
+
+  /* Confirmación específica para compras como invitado (C3).
+     No se navega a Historial (el invitado no tiene cuenta). */
+  function renderGuestConfirm(order) {
+    const money = (n) => fmtMoney(Math.round(n));
+    $('#gocId').textContent = order.id;
+    $('#gocItems').innerHTML = order.items.map(i => `
+      <div class="summary-line">
+        <span>${esc(i.name)} <span class="muted">× ${i.qty}</span></span>
+        <span class="money">${money(i.price * i.qty)}</span>
+      </div>`).join('');
+    $('#gocSubtotal').textContent = money(order.subtotal);
+    $('#gocDelivery').textContent = order.delivery === 0 && order.subtotal > 0 ? 'GRATIS' : money(order.delivery);
+    $('#gocTotal').textContent = money(order.total);
+    const pay = order.payment && order.payment.method === 'efectivo'
+      ? '💵 Efectivo'
+      : '📲 Digital';
+    const denom = order.payment ? (parseInt(order.payment.denomination, 10) || 0) : 0;
+    const change = denom > 0 ? money(Math.max(0, denom - order.total)) : null;
+    $('#gocDetails').innerHTML = `
+      <div class="summary-line"><span>Método de pago</span><span>${pay}${change ? ' · Cambio: ' + change : ''}</span></div>
+      <div class="summary-line"><span>Dirección de entrega</span><span>${esc(order.address)}</span></div>
+      <div class="summary-line"><span>Entrega</span><span>${esc(order.deliveryLabel)}</span></div>
+      <div class="summary-line"><span>Contacto</span><span>${esc(order.userName)} · 📱 ${esc(order.phone)}</span></div>`;
+    $('#gocSlot').textContent = order.deliverySlot === 'manana' ? '🌅 Mañana' : '🌇 Tarde';
+    openModal('#guestOrderModal');
   }
 
   /* ---------- Perfil / Sesión ---------- */

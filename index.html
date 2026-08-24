@@ -507,6 +507,40 @@
     </div>
   </div>
 
+  <!-- ================= MODAL CONFIRMACIÓN COMPRA INVITADO (C3) ================= -->
+  <div class="modal-backdrop" id="guestOrderModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>🎉 ¡Compra confirmada!</h3>
+        <button class="ico-close" data-close-guest aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" style="margin-bottom:12px">Tu pedido quedó registrado. Te contactaremos al número indicado para coordinar la entrega.</p>
+        <div class="panel" style="background:var(--cloud);padding:14px;margin-bottom:12px">
+          <div class="summary-line"><span>Pedido</span><span id="gocId" class="money" style="font-weight:800"></span></div>
+          <div id="gocItems"></div>
+          <div class="summary-line"><span>Subtotal</span><span class="money" id="gocSubtotal"></span></div>
+          <div class="summary-line"><span>Domicilio</span><span class="money" id="gocDelivery"></span></div>
+          <div class="summary-line total"><span>Total</span><span class="money" id="gocTotal"></span></div>
+        </div>
+        <div id="gocDetails"></div>
+        <div class="panel" style="background:var(--cloud);padding:14px;margin-top:12px">
+          <p class="muted" style="font-size:.85rem;margin-bottom:12px">
+            <strong>¿Qué sigue?</strong> Tu pedido está <strong>pendiente</strong> y se entregará en la franja <strong id="gocSlot"></strong>.
+            Guarda el ID del pedido por si te contactamos.
+          </p>
+          <div class="row" style="gap:10px">
+            <button class="btn btn-gold grow" id="btnGuestBackStore">🛍️ Volver a la tienda</button>
+            <button class="btn btn-navy grow" id="btnGuestCreateAccount">✨ Crear una cuenta</button>
+          </div>
+          <p class="muted" style="font-size:.78rem;margin-top:10px">
+            Crea tu cuenta y compra más rápido la próxima vez: guarda tus datos de entrega y consulta el historial de compras.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-wrap" id="toastWrap"></div>
 
   <script src="js/data.js"></script>
