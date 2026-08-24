@@ -379,6 +379,46 @@
       <div class="modal-head"><h3>Finalizar compra</h3><button class="ico-close" data-close-modal aria-label="Cerrar">✕</button></div>
       <div class="modal-body">
         <div id="checkoutUserInfo" class="panel" style="background:var(--cloud);padding:14px"></div>
+
+        <!-- Checkout sin sesión: tres opciones (invitado / iniciar sesión / registrarme) -->
+        <div id="checkoutGuestBlock">
+          <div class="tabs" id="checkoutTabs" style="margin-bottom:14px">
+            <button class="tab active" data-copt="guest">🛒 Invitado</button>
+            <button class="tab" data-copt="login">🔐 Iniciar sesión</button>
+            <button class="tab" data-copt="register">✨ Registrarme</button>
+          </div>
+
+          <!-- Opción 1: invitado -->
+          <div class="row" id="checkoutGuestForm">
+            <div class="field grow"><label for="guestName">Nombre completo</label><input id="guestName" type="text" placeholder="Ej: María Fernanda" /></div>
+            <div class="field grow"><label for="guestPhone">Número de celular</label><input id="guestPhone" type="tel" placeholder="Ej: 300 123 4567" /></div>
+          </div>
+
+          <!-- Opción 2: iniciar sesión -->
+          <div class="hidden" id="checkoutLoginForm">
+            <div class="field"><label for="checkoutLogEmail">Correo electrónico</label><input id="checkoutLogEmail" type="email" placeholder="Ej: maria@correo.com" /></div>
+            <div class="field"><label for="checkoutLogPassword">Contraseña</label><input id="checkoutLogPassword" type="password" placeholder="Tu contraseña" /></div>
+            <button class="btn btn-navy" id="btnCheckoutLogin">Iniciar sesión y continuar</button>
+            <p class="muted" id="checkoutLoginMsg" style="font-size:.82rem;min-height:16px;margin-top:6px"></p>
+          </div>
+
+          <!-- Opción 3: registrarme -->
+          <div class="hidden" id="checkoutRegisterForm">
+            <p class="muted" style="font-size:.9rem;margin-bottom:12px">
+              <strong>Crea tu cuenta y compra más rápido la próxima vez 🐾</strong><br/>
+              Guarda tu información de entrega, consulta compras anteriores y completa tu próximo pedido en segundos.
+            </p>
+            <div class="field"><label for="checkoutRegName">Nombre completo</label><input id="checkoutRegName" type="text" placeholder="Ej: María Fernanda" /></div>
+            <div class="row">
+              <div class="field grow"><label for="checkoutRegEmail">Correo electrónico</label><input id="checkoutRegEmail" type="email" /></div>
+              <div class="field grow"><label for="checkoutRegPassword">Contraseña</label><input id="checkoutRegPassword" type="password" /></div>
+            </div>
+            <div class="field"><label for="checkoutRegPhone">Número de celular</label><input id="checkoutRegPhone" type="tel" /></div>
+            <button class="btn btn-navy" id="btnCheckoutRegister">Crear cuenta y continuar</button>
+            <p class="muted" id="checkoutRegisterMsg" style="font-size:.82rem;min-height:16px;margin-top:6px"></p>
+          </div>
+        </div>
+
         <div class="field"><label>Dirección de entrega</label><input id="checkoutAddress" type="text" placeholder="Barrio y dirección completa" /></div>
         <h4 style="margin-bottom:10px">Franja de entrega</h4>
         <div class="row mb-3" id="slotOptions"></div>

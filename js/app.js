@@ -432,9 +432,7 @@
     $('#btnCheckout').addEventListener('click', () => {
       const { items } = cartTotals();
       if (!items.length) { toast('Agrega productos al carrito', 'error'); return; }
-      const user = App.currentUser();
-      if (!user) { toast('Debes registrarte antes de pagar', 'error'); $('#cartDrawer').classList.remove('open'); AppNav('perfil'); return; }
-      openCheckout(user);
+      openCheckout();
     });
   }
 
@@ -445,6 +443,8 @@
   /* Idempotencia (P6.2): clave única por intención de compra. */
   let pendingCheckoutKey = null;
   let pendingCheckoutFingerprint = null;
+  /* Modo del checkout: 'user' | 'guest' | 'login' | 'register'. */
+  let checkoutMode = 'user';
 
   function newClientKey() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -458,12 +458,24 @@
     return `${sorted}||${address.trim()}||${payMethod}:${denom}`;
   }
 
-  function openCheckout(user) {
+  function openCheckout() {
+    const user = App.currentUser();
     const { subtotal, delivery, total } = cartTotals();
     computedDelivery = getNextDeliverySlot();
-    $('#checkoutUserInfo').innerHTML = `
-      <strong>${esc(user.name)}</strong><br/>
-      <span class="muted">📱 ${esc(user.phone)} · ✉️ ${esc(user.email)}</span>`;
+    const userInfo = $('#checkoutUserInfo');
+    userInfo.style.display = user ? '' : 'none';
+    if (user) {
+      userInfo.innerHTML = `
+        <strong>${esc(user.name)}</strong><br/>
+        <span class="muted">📱 ${esc(user.phone)} · ✉️ ${esc(user.email)}</span>`;
+      $('#checkoutGuestBlock').style.display = 'none';
+      $('#checkoutAddress').value = user.address || '';
+      checkoutMode = 'user';
+    } else {
+      $('#checkoutGuestBlock').style.display = '';
+      checkoutMode = 'guest';
+      switchCheckoutMode('guest');
+    }
     $('#coSubtotal').textContent = fmtMoney(subtotal);
     $('#coDelivery').textContent = deliveryDisplay(delivery, subtotal);
     $('#coFreeMsg').innerHTML = freeDeliveryMsg(subtotal);
@@ -490,8 +502,81 @@
     $('#cashOptions').classList.toggle('hidden', false);
     $('#digitalOptions').classList.add('hidden');
     updateCashChange();
-    $('#checkoutAddress').value = user.address || '';
     openModal('#checkoutModal');
+  }
+
+  /* Cambia la pestaña activa del checkout (invitado / login / registro). */
+  function switchCheckoutMode(mode) {
+    checkoutMode = mode;
+    $$('#checkoutTabs .tab').forEach(t => t.classList.toggle('active', t.dataset.copt === mode));
+    $('#checkoutGuestForm').classList.toggle('hidden', mode !== 'guest');
+    $('#checkoutLoginForm').classList.toggle('hidden', mode !== 'login');
+    $('#checkoutRegisterForm').classList.toggle('hidden', mode !== 'register');
+    $('#checkoutLoginMsg').textContent = '';
+    $('#checkoutRegisterMsg').textContent = '';
+  }
+
+  /* Tras autenticarse/registrarse desde el checkout: continúa en el modal
+     como usuario, sin perder el carrito. */
+  function afterCheckoutAuth(user) {
+    const info = $('#checkoutUserInfo');
+    info.innerHTML = `
+      <strong>${esc(user.name)}</strong><br/>
+      <span class="muted">📱 ${esc(user.phone)} · ✉️ ${esc(user.email)}</span>`;
+    info.style.display = '';
+    $('#checkoutGuestBlock').style.display = 'none';
+    checkoutMode = 'user';
+    if (user.address) $('#checkoutAddress').value = user.address;
+    refreshSessionUI();
+    toast(`¡Hola ${user.name}! 🐾`);
+  }
+
+  async function checkoutLogin() {
+    const email = $('#checkoutLogEmail').value.trim();
+    const password = $('#checkoutLogPassword').value;
+    if (!email || !password) { $('#checkoutLoginMsg').textContent = 'Indica correo y contraseña.'; return; }
+    const btn = $('#btnCheckoutLogin');
+    btn.disabled = true;
+    try {
+      const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+      setToken(data.token);
+      App.setCurrentUser(data.user);
+      afterCheckoutAuth(data.user);
+    } catch (e) {
+      $('#checkoutLoginMsg').textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function checkoutRegister() {
+    const name = $('#checkoutRegName').value.trim();
+    const email = $('#checkoutRegEmail').value.trim();
+    const password = $('#checkoutRegPassword').value;
+    const phone = $('#checkoutRegPhone').value.trim();
+    const address = $('#checkoutAddress').value.trim();
+    if (!name || !email || !password || !phone) {
+      $('#checkoutRegisterMsg').textContent = 'Completa nombre, correo, contraseña y celular.';
+      return;
+    }
+    const btn = $('#btnCheckoutRegister');
+    btn.disabled = true;
+    try {
+      const channel = detectChannel() || 'Directo';
+      const data = await api('/auth/register', { method: 'POST', body: { name, phone, email, password, channel } });
+      setToken(data.token);
+      App.setCurrentUser(data.user);
+      /* Guarda la dirección de entrega en la cuenta (updateMe acepta address). */
+      try {
+        await api('/auth/me', { method: 'PUT', body: { address } });
+        App.setCurrentUser({ ...data.user, address });
+      } catch { /* no crítico: la cuenta ya existe */ }
+      afterCheckoutAuth({ ...data.user, address });
+    } catch (e) {
+      $('#checkoutRegisterMsg').textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function bindCheckout() {
@@ -516,6 +601,12 @@
     });
     $('#cashDenom').addEventListener('change', updateCashChange);
     $('#btnConfirmOrder').addEventListener('click', confirmOrder);
+    $('#checkoutTabs').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-copt]');
+      if (b) switchCheckoutMode(b.dataset.copt);
+    });
+    $('#btnCheckoutLogin').addEventListener('click', checkoutLogin);
+    $('#btnCheckoutRegister').addEventListener('click', checkoutRegister);
   }
 
   function updateCashChange() {
@@ -528,10 +619,26 @@
   async function confirmOrder() {
     const user = App.currentUser();
     const { items } = cartTotals();
-    if (!user || !items.length) return;
+    if (!items.length) return;
     if (checkoutBusy) return;
+    const isGuest = checkoutMode === 'guest' && !user;
     const address = $('#checkoutAddress').value.trim();
     if (!address) { toast('Indica la dirección de entrega', 'error'); return; }
+
+    /* Datos del cliente: invitado desde el formulario; autenticado de la sesión. */
+    let name, phone;
+    if (isGuest) {
+      name = $('#guestName').value.trim();
+      phone = $('#guestPhone').value.trim();
+      if (name.length < 2) { toast('Indica tu nombre completo', 'error'); return; }
+      if (phone.length < 7) { toast('Indica un número de celular válido', 'error'); return; }
+    } else if (!user) {
+      toast('Inicia sesión o regístrate para continuar', 'error');
+      return;
+    } else {
+      name = user.name;
+      phone = user.phone;
+    }
 
     const payMethod = selectedPay === 'efectivo' ? 'efectivo' : 'digital';
     const denom = payMethod === 'efectivo' ? (parseInt($('#cashDenom').value || 0, 10) || 0) : 0;
@@ -559,9 +666,12 @@
         : { method: 'digital' },
       clientOrderKey: pendingCheckoutKey
     };
+    if (isGuest) { payload.name = name; payload.phone = phone; }
 
     try {
-      const order = await api('/orders', { method: 'POST', body: payload });
+      /* Invitado: no se envía Authorization (auth:false), aunque exista un
+         token residual en localStorage. */
+      const order = await api('/orders', { method: 'POST', body: payload, auth: !isGuest });
       App.cart = [];
       pendingCheckoutKey = null;
       pendingCheckoutFingerprint = null;
