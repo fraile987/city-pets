@@ -5,6 +5,7 @@
   'use strict';
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  let compState = null;
 
   /* ---------- Init ---------- */
   document.addEventListener('DOMContentLoaded', init);
@@ -839,11 +840,15 @@
       const o = $('#compProduct').selectedOptions[0];
       if (!o) return;
       $('#compGrams').value = o.dataset.grams / 1000;
+      const hasRation = parseFloat(o.dataset.ration) > 0;
+      $('#compMonthlyField').style.display = hasRation ? 'none' : '';
+      if (hasRation) $('#compMonthlyKg').value = '';
     };
-    $('#compProduct').addEventListener('change', syncComp);
+    $('#compProduct').addEventListener('change', () => { syncComp(); compState = null; $('#compResult').innerHTML = ''; });
     const toggleCompGrams = () => {
       $('#compGramsField').style.display = $('#compSame').checked ? 'none' : '';
       syncComp();
+      compState = null;
       $('#compResult').innerHTML = '';
     };
     $('#compSame').addEventListener('change', toggleCompGrams);
@@ -869,7 +874,58 @@
         </div>`;
     });
 
-    $('#btnCompare').addEventListener('click', () => {
+    const buildAnnual = () => {
+      const s = compState;
+      if (!s) return '';
+      const monthlyKg = parseFloat($('#compMonthlyKg').value);
+      if (s.ration > 0) {
+        const annualKg = s.ration * 365 / 1000;
+        const cpAnnual = s.cpPerKg * annualKg;
+        const compAnnual = s.compPerKg * annualKg;
+        const savings = compAnnual - cpAnnual;
+        const savingsLabel = s.equal
+          ? 'Sin ahorro anual'
+          : s.cheaper
+            ? `Ahorro anual: ${fmtMoney(Math.round(savings))}`
+            : `${fmtMoney(Math.round(Math.abs(savings)))} más al año`;
+        return `
+          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
+            <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
+            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Estimación basada en la ración diaria de ${s.ration} g/día y 365 días de consumo.</div>
+            <div class="summary-line"><span>Consumo diario</span><span>${s.ration} g/día</span></div>
+            <div class="summary-line"><span>Consumo anual</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
+            <div class="summary-line"><span>City Pets al año</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
+            <div class="summary-line"><span>Competencia al año</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
+            <div class="summary-line"><span>Ahorro anual</span><span style="font-weight:800;color:${s.diffColor}">${savingsLabel}</span></div>
+          </div>`;
+      }
+      if (!isNaN(monthlyKg) && monthlyKg > 0) {
+        const annualKg = monthlyKg * 12;
+        const cpAnnual = s.cpPerKg * annualKg;
+        const compAnnual = s.compPerKg * annualKg;
+        const savings = compAnnual - cpAnnual;
+        const savingsLabel = s.equal
+          ? 'Sin ahorro anual'
+          : s.cheaper
+            ? `Ahorro anual: ${fmtMoney(Math.round(savings))}`
+            : `${fmtMoney(Math.round(Math.abs(savings)))} más al año`;
+        return `
+          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
+            <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
+            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Estimación basada en un consumo de ${Number(monthlyKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg al mes ingresado por ti.</div>
+            <div class="summary-line"><span>Consumo anual estimado</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
+            <div class="summary-line"><span>Gasto anual City Pets</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
+            <div class="summary-line"><span>Gasto anual competidor</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
+            <div class="summary-line"><span>Ahorro anual estimado</span><span style="font-weight:800;color:${s.diffColor}">${savingsLabel}</span></div>
+          </div>`;
+      }
+      return `
+        <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
+          <div class="muted" style="font-size:.8rem">Este producto no tiene ración diaria. Para estimar tu ahorro anual, ingresa en <strong>Cantidad que utilizas al mes</strong> cuánto consumes (ej. 4 kg de arena al mes). La comparación por kilogramo ya se muestra.</div>
+        </div>`;
+    };
+
+    const runCompare = () => {
       const opt = $('#compProduct').selectedOptions[0];
       const p = opt ? App.products.find(x => x.id === opt.value) : null;
       if (!p) { toast('Selecciona un producto City Pets', 'error'); return; }
@@ -879,10 +935,14 @@
       const grams = typeof p.grams === 'number' ? p.grams : (parseInt(p.grams, 10) || 0);
       const ration = typeof p.dailyRation === 'number' ? p.dailyRation : (parseInt(p.dailyRation, 10) || 0);
       if (isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0) {
+        compState = null;
+        $('#compResult').innerHTML = '';
         toast('Completa precio y gramaje de la competencia (positivos)', 'error');
         return;
       }
       if (!grams || grams <= 0) {
+        compState = null;
+        $('#compResult').innerHTML = '';
         toast('Este producto no tiene gramaje registrado; no se puede calcular el precio por kg', 'error');
         return;
       }
@@ -900,37 +960,8 @@
         ? 'Sin diferencia'
         : `${fmtMoney(Math.round(Math.abs(diff)))}/kg ${cheaper ? 'a favor de City Pets' : 'a favor de la competencia'}`;
 
-      /* La comparación por kg y el veredicto se muestran siempre. El ahorro
-         anual depende de la ración diaria; si no está configurada, se muestra
-         un mensaje claro en lugar de bloquear el resultado. */
-      let annualSection;
-      if (ration > 0) {
-        const annualKg = ration * 365 / 1000;
-        const cpAnnual = cpPerKg * annualKg;
-        const compAnnual = compPerKg * annualKg;
-        const savings = compAnnual - cpAnnual;
-        const savingsLabel = equal
-          ? 'Sin ahorro anual'
-          : cheaper
-            ? `Ahorro anual: ${fmtMoney(Math.round(savings))}`
-            : `${fmtMoney(Math.round(Math.abs(savings)))} más al año`;
-        annualSection = `
-          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
-            <div class="muted" style="font-size:.8rem;margin-bottom:.4rem">💰 Ahorro anual estimado</div>
-            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Basado en una ración de ${ration} g/día y 365 días de consumo.</div>
-            <div class="summary-line"><span>Consumo anual</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
-            <div class="summary-line"><span>City Pets al año</span><span class="money">${fmtMoney(Math.round(cpAnnual))}</span></div>
-            <div class="summary-line"><span>Competencia al año</span><span class="money">${fmtMoney(Math.round(compAnnual))}</span></div>
-            <div class="summary-line"><span>Ahorro anual</span><span style="font-weight:800;color:${diffColor}">${savingsLabel}</span></div>
-          </div>`;
-      } else {
-        annualSection = `
-          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
-            <div class="muted" style="font-size:.8rem">Este producto no tiene ración diaria configurada; no es posible calcular el ahorro anual. Se muestra solo la comparación por kilogramo.</div>
-          </div>`;
-      }
-
-      $('#compResult').innerHTML = `
+      compState = { ration, cpPerKg, compPerKg, equal, cheaper, diffColor };
+      const perKgHtml = `
         <div class="panel" style="background:var(--cloud)">
           <div class="muted" style="font-size:.85rem;margin-bottom:.5rem">${esc(p.name)} · ${esc(p.unit)}${same ? ' — Referencia: mismo producto / mismas características' : ''}</div>
           <div class="row" style="justify-content:space-between">
@@ -958,8 +989,15 @@
                   : `⚠️ City Pets es ${pct}% más caro`}
             </div>
           </div>
-          ${annualSection}
         </div>`;
+      compState.perKgHtml = perKgHtml;
+      $('#compResult').innerHTML = perKgHtml + buildAnnual();
+    };
+
+    $('#btnCompare').addEventListener('click', runCompare);
+    $('#compMonthlyKg').addEventListener('input', () => {
+      if (!compState) return;
+      $('#compResult').innerHTML = compState.perKgHtml + buildAnnual();
     });
 
     $('#btnFeedback').addEventListener('click', submitFeedback);

@@ -249,7 +249,7 @@
 
         <div class="panel">
           <div class="panel-header"><h3>⚖️ Comparativa / Calculadora de ahorro</h3></div>
-          <p class="muted mb-3">Compara el precio por kilogramo de City Pets frente a otros almacenes y estima tu ahorro anual según la ración diaria del producto.</p>
+          <p class="muted mb-3">Compara el precio por kilogramo de City Pets frente a otros almacenes y estima tu ahorro anual según la ración diaria (alimentos) o tu consumo mensual (arena y otros productos).</p>
           <div class="row">
             <div class="field grow">
               <label for="compProduct">Producto City Pets</label>
@@ -262,6 +262,12 @@
             <div class="field grow" id="compGramsField">
               <label for="compGrams">Gramaje equivalente (kg)</label>
               <input id="compGrams" type="number" min="0.1" step="0.1" placeholder="Ej: 12" autocomplete="off" />
+            </div>
+          </div>
+          <div class="row" id="compMonthlyField" style="display:none">
+            <div class="field grow">
+              <label for="compMonthlyKg">Cantidad que utilizas al mes</label>
+              <input id="compMonthlyKg" type="number" min="0.1" step="0.1" placeholder="Ej: 4 kg" autocomplete="off" />
             </div>
           </div>
           <label class="checkbox-row" style="cursor:pointer;margin-bottom:14px">
