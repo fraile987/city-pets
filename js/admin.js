@@ -526,6 +526,7 @@
       $('#apmSpecies').value = 'Perros';
       $('#apmFeatured').checked = false;
       $('#apmMinStock').value = 10;
+      $('#apmFrequency').value = 1;
       $('#apmImage').value = '';
       $('#apmVideo').value = '';
       $('#apmImagePreview').innerHTML = '';
@@ -594,6 +595,7 @@
     $('#apmRation').value = p.dailyRation;
     $('#apmFeatured').checked = !!p.featured;
     $('#apmMinStock').value = p.minStock === undefined ? 10 : p.minStock;
+    $('#apmFrequency').value = p.purchaseFrequencyMonths === undefined ? 1 : p.purchaseFrequencyMonths;
     $('#apmDesc').value = p.desc;
     $('#apmTags').value = p.tags.join(';');
     $('#apmImagePreview').innerHTML = `<img src="${p.images[0] || IMG_PLACEHOLDER}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" />`;
@@ -619,7 +621,8 @@
         dailyRation: parseInt($('#apmRation').value) || 0,
         tags: $('#apmTags').value.split(';').map(t => t.trim().toLowerCase()).filter(Boolean),
         featured: $('#apmFeatured').checked,
-        minStock: Math.max(0, parseInt($('#apmMinStock').value) || 10)
+        minStock: Math.max(0, parseInt($('#apmMinStock').value) || 10),
+        purchaseFrequencyMonths: Math.min(24, Math.max(1, parseInt($('#apmFrequency').value) || 1))
       };
       try {
         if (id) {

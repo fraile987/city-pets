@@ -95,6 +95,11 @@ function validateProductFields(body) {
   if (body.minStock !== undefined && (typeof body.minStock !== 'number' || !Number.isInteger(body.minStock) || body.minStock < 0)) {
     return 'El stock mínimo debe ser un entero mayor o igual a 0';
   }
+  if (body.purchaseFrequencyMonths !== undefined && body.purchaseFrequencyMonths !== null) {
+    if (typeof body.purchaseFrequencyMonths !== 'number' || !Number.isInteger(body.purchaseFrequencyMonths) || body.purchaseFrequencyMonths < 1 || body.purchaseFrequencyMonths > 24) {
+      return 'La frecuencia de compra debe ser un entero entre 1 y 24 meses';
+    }
+  }
   return null;
 }
 
@@ -113,6 +118,9 @@ async function createProduct(req, res) {
       stock: Math.min(toNonNegInt(req.body.stock), 1000000),
       desc: cap(req.body.desc, MAX.desc),
       dailyRation: Math.min(toNonNegInt(req.body.dailyRation), 100000),
+      purchaseFrequencyMonths: req.body.purchaseFrequencyMonths === undefined || req.body.purchaseFrequencyMonths === null
+        ? 1
+        : Math.min(Math.max(toNonNegInt(req.body.purchaseFrequencyMonths), 1), 24),
       tags: toJsonArray(req.body.tags),
       images: toJsonArray(sanitizeImages(req.body.images) || []),
       video: sanitizeVideo(req.body.video) || '',
@@ -137,7 +145,7 @@ async function updateProduct(req, res) {
     return res.status(404).json({ error: 'Producto no encontrado' });
   }
 
-  const { name, species, category, price, unit, grams, stock, desc, dailyRation, tags, images, video, rating, featured, minStock } = req.body;
+  const { name, species, category, price, unit, grams, stock, desc, dailyRation, tags, images, video, rating, featured, minStock, purchaseFrequencyMonths } = req.body;
   const data = {};
 
   if (name !== undefined) {
@@ -165,6 +173,12 @@ async function updateProduct(req, res) {
   if (stock !== undefined) data.stock = Math.min(toNonNegInt(stock), 1000000);
   if (desc !== undefined) data.desc = cap(desc, MAX.desc);
   if (dailyRation !== undefined) data.dailyRation = Math.min(toNonNegInt(dailyRation), 100000);
+  if (purchaseFrequencyMonths !== undefined) {
+    if (typeof purchaseFrequencyMonths !== 'number' || !Number.isInteger(purchaseFrequencyMonths) || purchaseFrequencyMonths < 1 || purchaseFrequencyMonths > 24) {
+      return res.status(400).json({ error: 'La frecuencia de compra debe ser un entero entre 1 y 24 meses' });
+    }
+    data.purchaseFrequencyMonths = purchaseFrequencyMonths;
+  }
   if (tags !== undefined) data.tags = toJsonArray(tags);
   if (images !== undefined) data.images = toJsonArray(sanitizeImages(images) || []);
   if (video !== undefined) data.video = sanitizeVideo(video);

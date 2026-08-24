@@ -50,6 +50,7 @@ model Product {
   stock       Int          @default(0)
   desc        String       @default("")
   dailyRation Int          @default(0)
+  purchaseFrequencyMonths Int          @default(1)
   tags        String       @default("[]")
   images      String       @default("[]")
   video       String       @default("")

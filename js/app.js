@@ -827,9 +827,9 @@
   function fillCalcSelects() {
     const food = App.products.filter(p => p.grams > 0);
     const label = (p) => `${esc(p.name)} — ${productPresentation(p) || esc(p.unit)}`;
-    const opts = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-ration="${p.dailyRation}">${label(p)}</option>`).join('');
+    const opts = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-ration="${p.dailyRation}" data-freq="${p.purchaseFrequencyMonths || 1}">${label(p)}</option>`).join('');
     $('#calcProduct').innerHTML = opts;
-    $('#compProduct').innerHTML = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-price="${p.price}" data-ration="${p.dailyRation}">${label(p)}</option>`).join('');
+    $('#compProduct').innerHTML = food.map(p => `<option value="${p.id}" data-grams="${p.grams}" data-price="${p.price}" data-ration="${p.dailyRation}" data-freq="${p.purchaseFrequencyMonths || 1}">${label(p)}</option>`).join('');
     $('#calcProduct').addEventListener('change', (e) => {
       const o = e.target.selectedOptions[0];
       if (!o) return;
@@ -840,9 +840,6 @@
       const o = $('#compProduct').selectedOptions[0];
       if (!o) return;
       $('#compGrams').value = o.dataset.grams / 1000;
-      const hasRation = parseFloat(o.dataset.ration) > 0;
-      $('#compMonthlyField').style.display = hasRation ? 'none' : '';
-      if (hasRation) $('#compMonthlyKg').value = '';
     };
     $('#compProduct').addEventListener('change', () => { syncComp(); compState = null; $('#compResult').innerHTML = ''; });
     const toggleCompGrams = () => {
@@ -883,7 +880,6 @@
         if (s.cheaper) return { text: `💰 Ahorro anual estimado: ${money(savings)}`, color: 'var(--green-600)' };
         return { text: `💰 Costo adicional anual: ${money(Math.abs(savings))}`, color: 'var(--red-500)' };
       };
-      const monthlyKg = parseFloat($('#compMonthlyKg').value);
       if (s.ration > 0) {
         const annualKg = s.ration * 365 / 1000;
         const cpAnnual = s.cpPerKg * annualKg;
@@ -899,23 +895,22 @@
             <div class="summary-line"><span>Competencia al año</span><span class="money">${money(compAnnual)}</span></div>
           </div>`;
       }
-      if (!isNaN(monthlyKg) && monthlyKg > 0) {
-        const annualKg = monthlyKg * 12;
-        const cpAnnual = s.cpPerKg * annualKg;
-        const compAnnual = s.compPerKg * annualKg;
-        const h = headline(compAnnual - cpAnnual);
-        return `
-          <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
-            <div style="font-size:1.15rem;font-weight:800;color:${h.color};margin-bottom:.4rem">${h.text}</div>
-            <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Estimación basada en un consumo de ${Number(monthlyKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg al mes ingresado por ti.</div>
-            <div class="summary-line"><span>Consumo anual estimado</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
-            <div class="summary-line"><span>Gasto anual City Pets</span><span class="money">${money(cpAnnual)}</span></div>
-            <div class="summary-line"><span>Gasto anual competidor</span><span class="money">${money(compAnnual)}</span></div>
-          </div>`;
-      }
+      const pesoKg = s.grams / 1000;
+      const comprasAnuales = 12 / s.freq;
+      const annualKg = pesoKg * comprasAnuales;
+      const cpAnnual = s.cpPerKg * annualKg;
+      const compAnnual = s.compPerKg * annualKg;
+      const h = headline(compAnnual - cpAnnual);
       return `
         <div class="mt-3" style="border-top:1px dashed #d0d6dd;padding-top:.75rem">
-          <div class="muted" style="font-size:.8rem">Este producto no tiene ración diaria. Para estimar tu ahorro anual, ingresa en <strong>Cantidad que utilizas al mes</strong> cuánto consumes (ej. 4 kg de arena al mes). La comparación por kilogramo ya se muestra.</div>
+          <div style="font-size:1.15rem;font-weight:800;color:${h.color};margin-bottom:.4rem">${h.text}</div>
+          <div class="muted" style="font-size:.72rem;margin-bottom:.4rem">Estimación para productos sin ración diaria, según la frecuencia de compra del producto (cada ${s.freq} mes${s.freq > 1 ? 'es' : ''}).</div>
+          <div class="summary-line"><span>Presentación</span><span>${Number(pesoKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
+          <div class="summary-line"><span>Periodicidad de compra</span><span>Cada ${s.freq} mes${s.freq > 1 ? 'es' : ''}</span></div>
+          <div class="summary-line"><span>Compras estimadas al año</span><span>${Number(comprasAnuales).toLocaleString('es-CO', { maximumFractionDigits: 1 })}</span></div>
+          <div class="summary-line"><span>Consumo anual estimado</span><span>${Number(annualKg).toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg</span></div>
+          <div class="summary-line"><span>Gasto anual City Pets</span><span class="money">${money(cpAnnual)}</span></div>
+          <div class="summary-line"><span>Gasto anual competidor</span><span class="money">${money(compAnnual)}</span></div>
         </div>`;
     };
 
@@ -928,6 +923,9 @@
       const compGrams = same ? p.grams : parseFloat($('#compGrams').value) * 1000;
       const grams = typeof p.grams === 'number' ? p.grams : (parseInt(p.grams, 10) || 0);
       const ration = typeof p.dailyRation === 'number' ? p.dailyRation : (parseInt(p.dailyRation, 10) || 0);
+      let freq = typeof p.purchaseFrequencyMonths === 'number' ? p.purchaseFrequencyMonths : (parseInt(p.purchaseFrequencyMonths, 10) || 1);
+      if (isNaN(freq) || freq < 1) freq = 1;
+      freq = Math.min(freq, 24);
       if (isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0) {
         compState = null;
         $('#compResult').innerHTML = '';
@@ -954,7 +952,7 @@
         ? 'Sin diferencia'
         : `${fmtMoney(Math.round(Math.abs(diff)))}/kg ${cheaper ? 'a favor de City Pets' : 'a favor de la competencia'}`;
 
-      compState = { ration, cpPerKg, compPerKg, equal, cheaper, diffColor };
+      compState = { ration, grams, freq, cpPerKg, compPerKg, equal, cheaper, diffColor };
       const perKgHtml = `
         <div class="panel" style="background:var(--cloud)">
           <div class="muted" style="font-size:.85rem;margin-bottom:.5rem">${esc(p.name)} · ${esc(p.unit)}${same ? ' — Referencia: mismo producto / mismas características' : ''}</div>
@@ -989,10 +987,6 @@
     };
 
     $('#btnCompare').addEventListener('click', runCompare);
-    $('#compMonthlyKg').addEventListener('input', () => {
-      if (!compState) return;
-      $('#compResult').innerHTML = compState.perKgHtml + buildAnnual();
-    });
 
     $('#btnFeedback').addEventListener('click', submitFeedback);
   }

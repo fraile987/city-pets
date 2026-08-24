@@ -26,6 +26,7 @@ const COLUMNS = [
   { key: 'stock',      aliases: ['stock'], label: 'Stock', type: 'int', fallback: 0, max: 1000000 },
   { key: 'desc',       aliases: ['descripcion', 'desc'], label: 'Descripción', type: 'string', fallback: '', max: MAX.desc },
   { key: 'dailyRation', aliases: ['raciondiaria', 'racion diaria', 'dailyration', 'daily ration'], label: 'Ración diaria (g)', type: 'int', fallback: 0, max: 100000 },
+  { key: 'purchaseFrequencyMonths', aliases: ['frecuencia de compra', 'frecuenciadecompra', 'frecuencia', 'meses entre compras', 'mesesentrecompras', 'purchasefrequencymonths'], label: 'Frecuencia de compra (meses)', type: 'int', fallback: 1, max: 24 },
   { key: 'tags',       aliases: ['tags', 'etiquetas'], label: 'Tags (separadas por ;)', type: 'tags', fallback: [] }
 ];
 
@@ -173,6 +174,23 @@ function validateRow(raw) {
     data[key] = val;
   }
 
+  /* purchaseFrequencyMonths (entero 1..24, mínimo 1; se compra cada N meses) */
+  const freqRaw = text('purchaseFrequencyMonths');
+  let freq = COLUMNS.find((c) => c.key === 'purchaseFrequencyMonths').fallback;
+  if (freqRaw !== '') {
+    const n = toIntLenient(freqRaw);
+    if (n === null) {
+      errors.push('La frecuencia de compra debe ser un número');
+    } else if (n < 1) {
+      errors.push('La frecuencia de compra debe ser al menos 1');
+    } else if (n > 24) {
+      errors.push('La frecuencia de compra supera el máximo permitido (24 meses)');
+    } else {
+      freq = n;
+    }
+  }
+  data.purchaseFrequencyMonths = freq;
+
   /* desc */
   data.desc = text('desc').slice(0, MAX.desc);
 
@@ -183,7 +201,7 @@ function validateRow(raw) {
 }
 
 function parseIntLabel(key) {
-  return { grams: 'Gramos', stock: 'Stock', dailyRation: 'La ración diaria' }[key] || key;
+  return { grams: 'Gramos', stock: 'Stock', dailyRation: 'La ración diaria', purchaseFrequencyMonths: 'La frecuencia de compra' }[key] || key;
 }
 
 /* ---------- Parseo del libro ---------- */
@@ -261,6 +279,7 @@ async function buildTemplate() {
     stock: 30,
     desc: 'Reemplaza esta fila de ejemplo con tus productos o bórrala antes de subir.',
     dailyRation: 140,
+    purchaseFrequencyMonths: 1,
     tags: 'top'
   });
   ws.addRow({
@@ -273,6 +292,7 @@ async function buildTemplate() {
     stock: 45,
     desc: 'Segunda fila de ejemplo.',
     dailyRation: 0,
+    purchaseFrequencyMonths: 2,
     tags: ''
   });
 
@@ -288,6 +308,8 @@ async function buildTemplate() {
     ['', '   · Especie', 'Valores permitidos: Perros, Gatos o General.'],
     ['', '   · Precio', 'En pesos colombianos. Acepta $185.000, 185000 o 185000,50.'],
     ['', '   · Tags', 'Sepáralas por ";" o ",". Ej: top; nuevo'],
+    ['', '   · Frecuencia de compra (meses)', '1 = cada mes, 2 = cada 2 meses, 3 = cada 3 meses… Solo aplica a productos sin ración diaria (arena y otros). Valores: 1 a 24.'],
+    ['', '   · Ración diaria (g)', 'Solo para alimentos. Si la dejas vacía o 0, la calculadora usará la frecuencia de compra.'],
     ['', '', ''],
     ['', '2. Filas de ejemplo', 'Las dos primeras filas de datos son ejemplos. Reemplázalas con tus productos o bórralas.'],
     ['', '', ''],
@@ -369,6 +391,7 @@ async function commit(req, res) {
               stock: d.stock,
               desc: d.desc,
               dailyRation: d.dailyRation,
+              purchaseFrequencyMonths: d.purchaseFrequencyMonths,
               tags: JSON.stringify(d.tags),
               images: '[]',
               video: '',
