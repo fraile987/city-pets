@@ -185,6 +185,7 @@
           </div>
           <div class="field"><label for="logEmail">Correo electrónico</label><input id="logEmail" type="email" placeholder="Ej: maria@correo.com" /></div>
           <div class="field"><label for="logPassword">Contraseña</label><input id="logPassword" type="password" placeholder="Tu contraseña" /></div>
+          <button class="btn btn-ghost btn-block mt-2" id="btnForgot">¿Olvidaste tu contraseña?</button>
           <button class="btn btn-navy" id="btnLogin">Entrar</button>
           <button class="btn btn-outline btn-block mt-2" id="btnGoRegister">¿No tienes cuenta? Regístrate</button>
         </div>
@@ -537,6 +538,42 @@
             Crea tu cuenta y compra más rápido la próxima vez: guarda tus datos de entrega y consulta el historial de compras.
           </p>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL RECUPERAR CONTRASEÑA (D2) ================= -->
+  <div class="modal-backdrop" id="forgotModal">
+    <div class="modal">
+      <div class="modal-head"><h3>Recuperar contraseña</h3><button class="ico-close" data-close-modal aria-label="Cerrar">✕</button></div>
+      <div class="modal-body">
+        <div class="field"><label for="forgotEmail">Correo electrónico</label><input id="forgotEmail" type="email" placeholder="Tu correo registrado" /></div>
+        <p class="muted" id="forgotMsg" style="font-size:.85rem;min-height:18px"></p>
+        <div class="hidden" id="forgotLinkBox" style="background:var(--cloud);border-radius:9px;padding:12px;margin-bottom:12px">
+          <p class="muted" style="font-size:.78rem;margin-bottom:6px">Enlace de recuperación (solo desarrollo):</p>
+          <div id="forgotLink" style="word-break:break-all;font-size:.78rem;margin-bottom:8px"></div>
+          <button class="btn btn-navy btn-sm" id="btnCopyForgot">📋 Copiar enlace</button>
+        </div>
+        <button class="btn btn-gold btn-block" id="btnSendForgot">Enviar enlace</button>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-modal>Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL RESTABLECER CONTRASEÑA (D2) ================= -->
+  <div class="modal-backdrop" id="resetModal">
+    <div class="modal">
+      <div class="modal-head"><h3>Restablecer contraseña</h3><button class="ico-close" data-close-reset aria-label="Cerrar">✕</button></div>
+      <div class="modal-body">
+        <div class="field"><label for="resetPassword">Nueva contraseña</label><input id="resetPassword" type="password" placeholder="Mínimo 6 caracteres" /></div>
+        <div class="field"><label for="resetPassword2">Confirmar contraseña</label><input id="resetPassword2" type="password" placeholder="Repite la contraseña" /></div>
+        <p class="muted" id="resetMsg" style="font-size:.85rem;min-height:18px"></p>
+        <button class="btn btn-gold btn-block" id="btnSubmitReset">Guardar nueva contraseña</button>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close-reset>Cancelar</button>
       </div>
     </div>
   </div>

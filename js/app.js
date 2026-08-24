@@ -22,6 +22,7 @@
     bindPets();
     bindConfirm();
     bindTools();
+    bindPasswordRecovery();
     renderFeedbackList();
     window.addEventListener('store-settings-changed', () => { renderDeliveryPromo(); renderCommercialInfo(); });
     await Promise.all([initSession(), loadProducts(), loadStoreSettings()]);
@@ -34,6 +35,7 @@
     renderDeliveryPromo();
     renderCommercialInfo();
     fillCalcSelects();
+    maybeOpenResetFromUrl();
     await fillRecommendations();
   }
 
@@ -445,6 +447,10 @@
   let pendingCheckoutFingerprint = null;
   /* Modo del checkout: 'user' | 'guest' | 'login' | 'register'. */
   let checkoutMode = 'user';
+  /* Recuperación de contraseña (D2): el token vive SOLO en memoria. */
+  let pendingResetToken = null;
+  let resetBusy = false;
+  let forgotBusy = false;
 
   function newClientKey() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -735,6 +741,131 @@
       <div class="summary-line"><span>Contacto</span><span>${esc(order.userName)} · 📱 ${esc(order.phone)}</span></div>`;
     $('#gocSlot').textContent = order.deliverySlot === 'manana' ? '🌅 Mañana' : '🌇 Tarde';
     openModal('#guestOrderModal');
+  }
+
+  /* ---------- Recuperación de contraseña (D2) ---------- */
+  function openForgotModal() {
+    $('#forgotEmail').value = '';
+    $('#forgotMsg').textContent = '';
+    $('#forgotLink').textContent = '';
+    $('#forgotLinkBox').classList.add('hidden');
+    openModal('#forgotModal');
+  }
+
+  async function submitForgot() {
+    const email = $('#forgotEmail').value.trim();
+    if (!email) { $('#forgotMsg').textContent = 'Indica tu correo electrónico.'; return; }
+    if (forgotBusy) return;
+    forgotBusy = true;
+    const btn = $('#btnSendForgot');
+    btn.disabled = true;
+    try {
+      const data = await api('/auth/forgot', { method: 'POST', body: { email } });
+      $('#forgotMsg').textContent = (data && data.message) || 'Si el correo existe, recibirás un enlace de recuperación.';
+      const link = data && typeof data.resetLink === 'string' ? data.resetLink : '';
+      if (link) {
+        /* Dev: el enlace se muestra con textContent (nunca innerHTML) y se copia. */
+        $('#forgotLink').textContent = link;
+        $('#forgotLinkBox').classList.remove('hidden');
+      } else {
+        $('#forgotLinkBox').classList.add('hidden');
+      }
+    } catch {
+      $('#forgotMsg').textContent = 'No se pudo procesar la solicitud. Inténtalo más tarde.';
+    } finally {
+      forgotBusy = false;
+      btn.disabled = false;
+    }
+  }
+
+  function fallbackCopy(text) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast('Enlace copiado');
+    } catch {
+      toast('No se pudo copiar el enlace', 'error');
+    }
+  }
+
+  function copyResetLink() {
+    const link = $('#forgotLink').textContent;
+    if (!link) return;
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(link)
+        .then(() => toast('Enlace copiado'))
+        .catch(() => fallbackCopy(link));
+    } else {
+      fallbackCopy(link);
+    }
+  }
+
+  /* Detecta ?token=... en la URL al iniciar, lo guarda SOLO en memoria y
+     limpia la barra de direcciones con history.replaceState. */
+  function maybeOpenResetFromUrl() {
+    let token = '';
+    try {
+      const url = new URL(window.location.href);
+      token = url.searchParams.get('token') || '';
+      if (token) {
+        url.searchParams.delete('token');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch { token = ''; }
+    if (!token || token.length < 8 || token.length > 128) return;
+    pendingResetToken = token;
+    $('#resetPassword').value = '';
+    $('#resetPassword2').value = '';
+    $('#resetMsg').textContent = '';
+    openModal('#resetModal');
+  }
+
+  function closeResetFlow() {
+    pendingResetToken = null;
+    closeModals();
+  }
+
+  async function submitReset() {
+    if (!pendingResetToken) {
+      $('#resetMsg').textContent = 'El enlace de recuperación no es válido. Solicita uno nuevo.';
+      return;
+    }
+    const pwd = $('#resetPassword').value;
+    const pwd2 = $('#resetPassword2').value;
+    if (pwd.length < 6) { $('#resetMsg').textContent = 'La contraseña debe tener al menos 6 caracteres.'; return; }
+    if (pwd !== pwd2) { $('#resetMsg').textContent = 'Las contraseñas no coinciden.'; return; }
+    if (resetBusy) return;
+    resetBusy = true;
+    const btn = $('#btnSubmitReset');
+    btn.disabled = true;
+    try {
+      await api('/auth/reset', { method: 'POST', body: { token: pendingResetToken, newPassword: pwd } });
+      pendingResetToken = null;
+      closeModals();
+      toast('Contraseña actualizada. Ya puedes iniciar sesión.', 'success');
+      AppNav('perfil');
+    } catch (e) {
+      $('#resetMsg').textContent = (e && e.message) || 'No se pudo restablecer la contraseña.';
+    } finally {
+      resetBusy = false;
+      btn.disabled = false;
+    }
+  }
+
+  function bindPasswordRecovery() {
+    $('#btnForgot').addEventListener('click', openForgotModal);
+    $('#btnSendForgot').addEventListener('click', submitForgot);
+    $('#btnCopyForgot').addEventListener('click', copyResetLink);
+    $('#btnSubmitReset').addEventListener('click', submitReset);
+    document.querySelectorAll('[data-close-reset]').forEach(el =>
+      el.addEventListener('click', closeResetFlow));
+    $('#resetModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeResetFlow();
+    });
   }
 
   /* ---------- Perfil / Sesión ---------- */
