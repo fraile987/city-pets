@@ -105,7 +105,7 @@ h1, h2, h3, h4 { color: var(--navy-800); line-height: 1.2; }
 .hero-split { display: grid; grid-template-columns: 1fr 1fr; height: calc(100vh - 68px); min-height: 560px; }
 .split-panel {
   position: relative; overflow: hidden; cursor: pointer;
-  display: flex; flex-direction: column; justify-content: flex-end;
+  display: flex; flex-direction: column;
   transition: flex 1 1 0s, transform .45s ease;
 }
 .panel-bg {
@@ -125,6 +125,7 @@ h1, h2, h3, h4 { color: var(--navy-800); line-height: 1.2; }
 }
 .panel-content {
   position: relative; z-index: 2; padding: 48px 40px; color: var(--white);
+  margin-top: auto;
 }
 .panel-content .icon-badge {
   width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
@@ -240,7 +241,7 @@ h1, h2, h3, h4 { color: var(--navy-800); line-height: 1.2; }
   display: flex; flex-direction: column;
 }
 .pf-card .pf-media { position: relative; aspect-ratio: 4/3; background: var(--gray-100); }
-.pf-card .pf-media img { width: 100%; height: 100%; object-fit: cover; }
+.pf-card .pf-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .pf-card .pf-tag {
   position: absolute; top: 8px; left: 8px; background: var(--gold-500); color: var(--navy-900);
   font-size: .62rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; text-transform: uppercase;

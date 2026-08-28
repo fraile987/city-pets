@@ -1154,6 +1154,7 @@
       const o = $('#compProduct').selectedOptions[0];
       if (!o) return;
       $('#compGrams').value = o.dataset.grams / 1000;
+      $('#compFreq').value = o.dataset.freq || 1;
     };
     $('#compProduct').addEventListener('change', () => { syncComp(); compState = null; $('#compResult').innerHTML = ''; });
     const toggleCompGrams = () => {
@@ -1237,9 +1238,13 @@
       const compGrams = same ? p.grams : parseFloat($('#compGrams').value) * 1000;
       const grams = typeof p.grams === 'number' ? p.grams : (parseInt(p.grams, 10) || 0);
       const ration = typeof p.dailyRation === 'number' ? p.dailyRation : (parseInt(p.dailyRation, 10) || 0);
-      let freq = typeof p.purchaseFrequencyMonths === 'number' ? p.purchaseFrequencyMonths : (parseInt(p.purchaseFrequencyMonths, 10) || 1);
-      if (isNaN(freq) || freq < 1) freq = 1;
-      freq = Math.min(freq, 24);
+      const freq = parseFloat($('#compFreq').value);
+      if (!Number.isInteger(freq) || freq < 1 || freq > 24) {
+        compState = null;
+        $('#compResult').innerHTML = '';
+        toast('Periodicidad de compra inválida: indica un valor entero entre 1 y 24 meses', 'error');
+        return;
+      }
       if (isNaN(compPrice) || compPrice <= 0 || isNaN(compGrams) || compGrams <= 0) {
         compState = null;
         $('#compResult').innerHTML = '';
@@ -1301,6 +1306,14 @@
     };
 
     $('#btnCompare').addEventListener('click', runCompare);
+
+    $('#compFreq').addEventListener('input', () => {
+      if (!compState) return;
+      const v = parseFloat($('#compFreq').value);
+      if (!Number.isInteger(v) || v < 1 || v > 24) return;
+      compState.freq = v;
+      $('#compResult').innerHTML = compState.perKgHtml + buildAnnual();
+    });
 
     $('#btnFeedback').addEventListener('click', submitFeedback);
   }
