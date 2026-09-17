@@ -9,3 +9,24 @@ uploads/
 
 # Backups locales (Fase 9.5C)
 backups/
+
+
+# Imágenes de demostración requeridas por el seed
+!uploads/
+uploads/*
+!uploads/products/
+uploads/products/*
+!uploads/products/p1.jpg
+!uploads/products/p2.jpg
+!uploads/products/p3.jpg
+!uploads/products/p4.jpg
+!uploads/products/p5.jpg
+!uploads/products/p6.jpg
+!uploads/products/p7.jpg
+!uploads/products/p8.jpg
+!uploads/products/p9.jpg
+!uploads/products/p10.jpg
+!uploads/products/p11.jpg
+!uploads/products/p12.jpg
+!uploads/products/p13.jpg
+!uploads/products/p14.jpg
